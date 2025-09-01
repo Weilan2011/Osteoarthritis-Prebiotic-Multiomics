@@ -1,0 +1,818 @@
+---
+title: "OA_Animal_cytokine_Mankin_scores_from_Dr.Herzog's_lab"
+author: "Weilan Wang 2025@ UofC"
+date: "2025-05-19"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+setwd('C:/Users/Weilan Wang/Desktop/weilan_R')
+
+library(car)
+library(circlize)
+library(ComplexHeatmap)
+library(cowplot)
+library(dada2)
+library(data.table)
+library(DECIPHER)
+library(DESeq2)
+library(dplyr)
+library(dunn.test)
+library(egg)
+library(emmeans)
+library(EnhancedVolcano)
+library(grid)
+library(git2r)
+library(ggpubr)
+library(ggplot2)
+library(GGally)
+library(ggcorrplot)
+library(gridExtra)
+library(Hmisc)
+library(lattice)
+library(limma)
+library(lme4)
+library(lmerTest)
+library(lsmeans)
+library(magrittr)
+library(Matrix)
+library(mgcv)
+library(microViz)
+library(MOFA2)
+library(MOFAdata)
+library(multiblock)
+library(nlme)
+library(pheatmap)
+library(purrr)
+library(phyloseq)
+library(readxl)
+library(reshape2)
+library(rstatix)
+library(RColorBrewer)
+library(ShortRead)
+library(tidyr)
+library(tidyverse)
+library(vegan)
+library(viridis)
+
+```
+
+
+```{r theme setup for figures, echo= FALSE}
+mytheme1 <- theme(panel.background = element_rect(fill = "white", color="black"), 
+                  axis.title = element_text(face="bold",size=12, color = "black"),
+                  axis.text.y  = element_text(face="bold",size=12, color = "black"),
+                  axis.text.x  = element_text(face="bold",size=12, color = "black"),
+                  panel.grid.minor.y=element_blank(), 
+                  panel.grid.minor.x=element_blank(),
+                  panel.grid.major.y=element_blank(),
+                  panel.grid.major.x=element_blank(),
+                  strip.background = element_blank(),
+                  strip.text.x = element_text(face="bold",size=14, color = "black"),
+                  legend.position = "top",
+                  legend.box = "horizontal",
+                  legend.title= element_blank(),
+                  legend.text =element_text(size=14),
+                  legend.key = element_blank())
+
+mytheme2 <- theme(panel.background = element_rect(fill = "white", color = NA), 
+                  panel.border = element_blank(), 
+                  axis.line.x = element_line(color = "black"),  # Keep the x-axis line
+                  axis.line.y = element_line(color = "black"),
+                  axis.title = element_text(face="bold",size=12, color = "black"),
+                  axis.text.y  = element_text(face="bold",size=12, color = "black"),
+                  axis.text.x  = element_text(face="bold",size=12, color = "black"),
+                  panel.grid.minor.y=element_blank(), 
+                  panel.grid.minor.x=element_blank(),
+                  panel.grid.major.y=element_blank(),
+                  panel.grid.major.x=element_blank(),
+                  strip.background = element_blank(),
+                  strip.text.x = element_text(face="bold",size=12, color = "black"),
+                  strip.text.y = element_blank(),
+                  legend.position = "right",
+                  legend.box = "vertical",
+                  legend.title= element_text(face="bold",size=10, color = "black"),
+                  legend.text =element_text(size=10),
+                  legend.key = element_blank())
+```
+
+
+```{r Cytokine data cleanup, warning=FALSE}
+# 1) Load raw data and extract groups 'HFS' & 'HFS+F', create a new variable: Category= Group*Time_point
+JR_serum_cytokine_raw <-read.csv("OA_JR_Serum_cytokine_raw.csv") %>%
+  mutate(Category = paste(Group, Time_point, sep = "_")) %>%
+  filter(Group %in% c('HFS', 'HFS+F')) %>%
+  select(c(Category, Sample_ID:RANTES..78.))
+
+JR_synovial_cytokine_raw <-read.csv("OA_JR_Synovial_cytokine_raw.csv") %>%
+  filter(Group %in% c('HFS', 'HFS+F'))%>%
+  mutate(Category = paste(Group, Time_point, sep = "_")) %>%
+  filter(Group %in% c('HFS', 'HFS+F')) %>%
+  select(c(Category, Sample_ID:RANTES..78.))
+
+# 2) Clean column names to keep only the part before `..`
+colnames(JR_serum_cytokine_raw) <- sapply(strsplit(colnames(JR_serum_cytokine_raw ), "\\.\\."), `[`, 1)
+colnames(JR_synovial_cytokine_raw) <- sapply(strsplit(colnames(JR_synovial_cytokine_raw), "\\.\\."), `[`, 1)
+
+# 3) Replace any cell containing "OOR" or starting with "OOR", like "OOR <", "OOR >" etc
+JR_serum_cytokine_clean <- JR_serum_cytokine_raw %>%
+  mutate(across(where(~ is.character(.) | is.factor(.)),
+                ~ ifelse(str_detect(., "^OOR"), "", .)))
+
+JR_synovial_cytokine_clean <- JR_synovial_cytokine_raw %>%
+  mutate(across(where(~ is.character(.) | is.factor(.)),
+                ~ ifelse(str_detect(., "^OOR"), "", .)))
+
+# 4) remove outliers calculated per group by using standard z-score with threshold =3
+find_outliers_and_replace_na <- function(df, dataset_name, group_code_col = "Group_code", threshold = 3) {
+  start_col <- which(colnames(df) == group_code_col) + 1
+  
+  df_numeric <- df %>%
+    mutate(across(all_of(colnames(df)[start_col:ncol(df)]), ~ as.numeric(.)))
+  
+  # Copy of numeric columns to modify
+  df_cleaned_numeric <- df_numeric[, start_col:ncol(df_numeric)]
+  
+  # Function to find outlier indices in a vector
+  find_std_outliers <- function(x, threshold) {
+    mean_x <- mean(x, na.rm = TRUE)
+    sd_x <- sd(x, na.rm = TRUE)
+    z_scores <- (x - mean_x) / sd_x
+    which(abs(z_scores) > threshold)
+  }
+  
+  outlier_info_list <- list()
+  
+  for (col_name in names(df_cleaned_numeric)) {
+    x <- df_cleaned_numeric[[col_name]]
+    if (all(is.na(x))) next  # skip columns all NA
+    
+    # Calculate outliers **per Category: Group_Time**
+    outlier_rows <- c()
+    for (grp in unique(df_numeric$Category)) {
+      grp_indices <- which(df_numeric$Category == grp)
+      x_grp <- x[grp_indices]
+      outliers_in_grp <- find_std_outliers(x_grp, threshold)
+      if (length(outliers_in_grp) > 0) {
+        outlier_rows <- c(outlier_rows, grp_indices[outliers_in_grp])
+      }
+    }
+    
+    # Replace outliers with NA in cleaned numeric data
+    if (length(outlier_rows) > 0) {
+      df_cleaned_numeric[outlier_rows, col_name] <- NA
+      
+      # Collect outlier info for reporting
+      outlier_info_list[[col_name]] <- tibble(
+        Row = outlier_rows,
+        Time_point = df_numeric$Time_point[outlier_rows],
+        Rat_ID = df_numeric$Rat_ID[outlier_rows],
+        Category = df_numeric$Category[outlier_rows],
+        Column = col_name,
+        Value = x[outlier_rows],
+        Dataset = dataset_name,
+        Method = "Z-score"
+      )
+    }
+  }
+  
+  # Recombine cleaned numeric columns with non-numeric columns
+  df_cleaned <- bind_cols(df_numeric[, 1:(start_col - 1)], df_cleaned_numeric)
+  outliers_df <- if(length(outlier_info_list) > 0) do.call(rbind, outlier_info_list) else tibble()
+  return(list(cleaned_data = df_cleaned, outliers = outliers_df))
+}
+
+serum_results <- find_outliers_and_replace_na(JR_serum_cytokine_clean, "Serum")
+synovial_results <- find_outliers_and_replace_na(JR_synovial_cytokine_clean, "Synovial")
+
+JR_serum_cytokine_clean <- serum_results$cleaned_data
+JR_synovial_cytokine_clean <- synovial_results$cleaned_data
+
+outliers_serum <- serum_results$outliers
+outliers_synovial <- synovial_results$outliers
+combined_outliers_df <- bind_rows(outliers_serum, outliers_synovial)
+
+print(combined_outliers_df)
+
+# 5) remove cols with > 60% empty strings
+serum_total_rows <- nrow(JR_serum_cytokine_clean)
+synovial_total_rows <- nrow(JR_synovial_cytokine_clean)
+
+serum_start_col <- which(colnames(JR_serum_cytokine_clean) == "Group_code") + 1
+synovial_start_col <-  which(colnames(JR_synovial_cytokine_clean) == "Group_code") + 1
+
+serum_cols_to_check <- colnames(JR_serum_cytokine_clean)[serum_start_col:ncol(JR_serum_cytokine_clean)]
+synovial_cols_to_check <- colnames(JR_synovial_cytokine_clean)[synovial_start_col:ncol(JR_synovial_cytokine_clean)]
+
+serum_empty_props <- sapply(JR_serum_cytokine_clean[, serum_cols_to_check], 
+                               function(col) sum(col == "" | is.na(col), na.rm = TRUE) / serum_total_rows)
+
+synovial_empty_props <- sapply(JR_synovial_cytokine_clean[, synovial_cols_to_check], 
+                               function(col) sum(col == "" | is.na(col), na.rm = TRUE) / synovial_total_rows)
+
+# Columns to keep (≤ 60% empty)
+serum_cols_keep <- names(serum_empty_props)[serum_empty_props <= 0.6]
+synovial_cols_keep <- names(synovial_empty_props)[synovial_empty_props <= 0.6]
+
+# Build new dataframe with all columns up to Group_code plus filtered columns after
+JR_serum_cytokine_filtered <- JR_serum_cytokine_clean %>%
+  select(1:(serum_start_col - 1), all_of(serum_cols_keep))
+
+JR_synovial_cytokine_filtered <- JR_synovial_cytokine_clean %>%
+  select(1:(synovial_start_col - 1), all_of(synovial_cols_keep))
+
+# final cleaned data
+write.csv(JR_serum_cytokine_filtered, "JR_serum_cytokine_filtered.csv")
+write.csv(JR_synovial_cytokine_filtered, "JR_synovial_cytokine_filtered.csv")
+
+colnames(JR_serum_cytokine_filtered)
+colnames(JR_synovial_cytokine_filtered)
+
+```
+
+
+```{r Cytokine Stats --- Linear Mixed Model, warning=FALSE}
+# select the cytokines overlpaed with human study and transfer datasheet into long format
+overlaped_cytokine <- c("IL.4", "IL.5", "IL.10", "IL.1B",  "TNFa", "IL.13")
+overlaped_cytokine2 <- c("IL.4", "IL.5", "IL.1B",  "IL.13")
+
+JR_serum_cytokine_long <- JR_serum_cytokine_filtered %>%
+  select(c(Category,Time_point, Type, Rat_ID, Group, all_of(overlaped_cytokine))) %>%
+  pivot_longer(all_of(overlaped_cytokine), names_to = "Cytokine", values_to = "Conc.")
+
+JR_synovial_cytokine_long <- JR_synovial_cytokine_filtered %>%
+select(c(Category,Time_point, Type, Rat_ID, Group, all_of(overlaped_cytokine2))) %>%
+  pivot_longer(all_of(overlaped_cytokine2), names_to = "Cytokine", values_to = "Conc.")
+
+# 1) Stats on each Cytokine by fitting linear mixed model 
+serum_cytokine_to_analyze <- unique(JR_serum_cytokine_long$Cytokine)
+synovial_cytokine_to_analyze <- unique(JR_synovial_cytokine_long$Cytokine)
+
+# initialize results storage 
+serum_all_results <- data.frame() 
+synovial_all_results <- data.frame()
+
+# Loop over each Serum cytokine
+for (var in serum_cytokine_to_analyze) {
+  data_var <- JR_serum_cytokine_long %>% filter(Cytokine == var)
+  model <- lmer(Conc. ~ Group * Time_point + (1 | Rat_ID), data = data_var, REML = FALSE)
+  
+  emms <- emmeans(model, ~ Group * Time_point)
+  emms_pairwise <- contrast(emms, interaction = "pairwise", simple = "each")
+  
+  # Extract simple contrasts separately to preserve adjusted p-value meaning
+  # 1) Group contrasts at each Time_point
+  group_contrasts <- contrast(emms, "trt.vs.ctrl", by = "Time_point", adjust = "tukey")
+  group_df <- as.data.frame(group_contrasts)
+  group_df$Contrast_Type <- "Group"
+  
+  # 2) Time_point contrasts at each Group
+  time_contrasts <- contrast(emms, "trt.vs.ctrl", by = "Group", adjust = "tukey")
+  time_df <- as.data.frame(time_contrasts)
+  time_df$Contrast_Type <- "Time_point"
+  
+  emms_df <- bind_rows(group_df, time_df) %>%
+    mutate(Cytokine = var)
+  serum_all_results <- bind_rows(serum_all_results, emms_df)
+  print(paste("Results for", var))
+  print(summary(emms_pairwise))
+}
+
+# Loop over each Synovial cytokine
+for (var in synovial_cytokine_to_analyze) {
+  data_var2 <- JR_synovial_cytokine_long %>% filter(Cytokine == var)  
+  
+  if (nrow(data_var2) > length(unique(data_var2$Rat_ID))) {
+    model2 <- lmer(Conc. ~ Group + (1 | Rat_ID), data = data_var2, REML = FALSE)
+  } else {
+    model2 <- lm(Conc. ~ Group, data = data_var2)
+  }
+  
+  emms2 <- emmeans(model2, ~ Group)
+  
+  # Use pairwise contrasts with Tukey adjustment
+  emms_pairwise2 <- contrast(emms2, method = "pairwise", adjust = "tukey")
+  
+  emms_df2 <- as.data.frame(emms_pairwise2) %>%
+    mutate(Cytokine = var,
+           Contrast_Type = "Group")
+  
+  synovial_all_results <- bind_rows(synovial_all_results, emms_df2)
+  
+  print(paste("Results for", var))
+  print(summary(emms_pairwise2))
+}
+
+# Save the Stats outcomes
+write.csv(serum_all_results, "JR_serum_cytokine_stats.csv")
+write.csv(synovial_all_results, "JR_synovial_cytokine_stats.csv")
+```
+```{r Cytokine Figures, warning=FALSE}
+# Boxplots for serum and synovial cytokines 
+JR_serum_cytokine_long$Category <- factor(JR_serum_cytokine_long$Category,
+                                             level=c('HFS_Pre','HFS_Post','HFS+F_Pre','HFS+F_Post'))
+
+JR_synovial_cytokine_long$Category <- factor(JR_synovial_cytokine_long$Category,
+                                             level=c('HFS_Post','HFS+F_Post'))
+
+JR_serum_cytokine_plot <- ggplot(data = JR_serum_cytokine_long,
+                                            aes(x = Group, y = Conc.)) +  
+  geom_boxplot(aes(fill = Category), color = "black", outlier.color = NA, 
+               position = position_dodge(width = 0.8), alpha = 0.75) +  
+  geom_jitter(aes(fill = Category), shape = 21, size = 2.5, color = "black", 
+              position = position_dodge(width = 1)) +  
+  scale_fill_manual(values = c("#D8C0E6","#800080", "lightyellow","orange")) +  
+  labs(x = "", y = "Serum Cytokine") + 
+  facet_wrap(~ Cytokine, scales = "free", nrow = 2) +
+  mytheme1  
+
+JR_synovial_cytokine_plot <- ggplot(data = JR_synovial_cytokine_long,
+                                            aes(x = Group, y = Conc.)) +  
+  geom_boxplot(aes(fill = Category), color = "black", outlier.color = NA, 
+               position = position_dodge(width = 0.8), alpha = 0.75) +  
+  geom_jitter(aes(fill = Category), shape = 21, size = 2.5,alpha = 0.75, color = "black", 
+              position = position_dodge(width = 1)) +  
+  scale_fill_manual(values = c("#800080", "orange")) +  
+  labs(x = "", y = "Synovial Cytokine") +  
+  facet_wrap(~ Cytokine, scales = "free", nrow = 1) +
+  mytheme1 
+
+print(JR_serum_cytokine_plot)
+print(JR_synovial_cytokine_plot)
+
+ggsave("JR_serum_cytokine_plot.svg", 
+       plot = JR_serum_cytokine_plot, 
+       device = "svg", 
+       width = 4.5, height = 4, 
+       units = "in")
+
+ggsave("JR_synovial_cytokine_plot.svg", 
+       plot = JR_synovial_cytokine_plot, 
+       device = "svg", 
+       width = 3.5, height = 2.5, 
+       units = "in")
+
+```
+
+```{r stats & figures for joint scores, warning=FALSE}
+JR_OA_joint_score2025_data <- read.csv("JR_OA_Animal_Joint__Ruth_rescored_05202025.csv")
+
+JR_OA_joint_score_long <- JR_OA_joint_score2025_data %>%
+  pivot_longer(cols=c(Cartilage_Mankin:Rat_total), names_to = "Scores_type", values_to = "Scores_value")
+
+# 1) Stats on each Score category by fitting linear mixed model 
+Joint_score_to_analyze <- unique(JR_OA_joint_score_long$Scores_type)
+Joint_score_results <- data.frame()
+
+# Loop over each Score category
+for (var in Joint_score_to_analyze) {
+  data_var3 <- JR_OA_joint_score_long %>% filter(Scores_type == var)  
+  
+  if (nrow(data_var3) > length(unique(data_var3$Rat_ID))) {
+    model3 <- lmer(Scores_value ~ Group + (1 | Rat_ID), data = data_var3, REML = FALSE)
+  } else {
+    model3 <- lm(Scores_value ~ Group, data = data_var3)
+  }
+  emms3 <- emmeans(model3, ~ Group)
+  emms_pairwise3 <- contrast(emms3, method = "pairwise", adjust = "tukey")
+  emms_df3 <- as.data.frame(emms_pairwise3) %>%
+    mutate(Scores_type = var, Contrast_Type = "Group")
+  Joint_score_results <- bind_rows(Joint_score_results, emms_df3)
+  print(paste("Results for", var))
+  print(summary(emms_pairwise3))
+}
+
+# Save the outcomes 
+write.csv(Joint_score_results, "JR_Joint_score_stats.csv")
+
+
+JR_Cartilage_LT_plot <- ggplot(data = JR_OA_joint_score2025_data,
+                                            aes(x = Group, y = Cartilage_LT)) +  
+  geom_boxplot(aes(fill = Group), color = "black", outlier.color = NA, 
+               position = position_dodge(width = 0.8), alpha = 0.75) +  
+  geom_jitter(aes(fill = Group), shape = 21, size = 2.5, color = "black", 
+              position = position_jitterdodge(jitter.width = 0.5, dodge.width = 0.8)) +  
+  scale_fill_manual(values = c("#800080", "orange")) + 
+  labs(x = "", y = "Mankin OA Score (0-24)") +  
+  mytheme2  
+
+JR_Cartilage_LT_plot
+
+JR_Syn_mem_plot <- ggplot(data = JR_OA_joint_score2025_data,
+                                            aes(x = Group, y = Syn_mem)) +  
+  geom_boxplot(aes(fill = Group), color = "black", outlier.color = NA, 
+               position = position_dodge(width = 0.8), alpha = 0.75) +  
+  geom_jitter(aes(fill = Group), shape = 21, size = 2.5, color = "black", 
+              position = position_jitterdodge(jitter.width = 0.5, dodge.width = 0.8)) +  
+  scale_fill_manual(values = c("#800080", "orange")) + 
+  labs(x = "", y = "Synovium Membrane Changes (0-4)") +  
+  mytheme2
+
+JR_Syn_mem_plot 
+
+
+JR_Joint_scores_combined_plot <- plot_grid(
+  JR_Cartilage_LT_plot,
+  JR_Syn_mem_plot,
+  ncol = 2,   # 1 column (vertical stack)
+  align = 'v'
+)
+
+JR_Joint_scores_combined_plot 
+
+ggsave("JR_Joint_scores_combined_plot2.svg", 
+       plot = JR_Joint_scores_combined_plot, 
+       device = "svg", 
+       width = 2.4, height = 3, 
+       units = "in")
+
+```
+
+```{r normalize cytokine to baseline, warning=FALSE}
+# List of cytokine columns (adjust if needed)
+JR_OA_Serum_cytokine_cols <- which(names(JR_serum_cytokine_filtered) == "G.CSF"):
+                 which(names(JR_serum_cytokine_filtered) == "RANTES")
+JR_OA_Serum_cytokine_names <- names(JR_serum_cytokine_filtered)[JR_OA_Serum_cytokine_cols]
+
+# Separate PRE and POST
+JR_OA_Serum_cytokine_pre <- JR_serum_cytokine_filtered %>% filter(Time_point == "Pre")
+JR_OA_Serum_cytokine_post <- JR_serum_cytokine_filtered %>% filter(Time_point == "Post")
+
+# Merge POST and PRE by Rat_ID to access both sets of values
+JR_OA_Serum_cytokine_merged <- JR_OA_Serum_cytokine_post %>%
+  left_join(JR_OA_Serum_cytokine_pre %>% select(Rat_ID, all_of(JR_OA_Serum_cytokine_names)),
+            by = "Rat_ID", suffix = c("_post", "_pre"))
+
+# Perform normalization only if both PRE and POST values are not NA
+for (cyto in JR_OA_Serum_cytokine_names) {
+  # Create a new column with normalized values
+  JR_OA_Serum_cytokine_merged[[paste0(cyto, "_normalized")]] <- 
+    ifelse(
+      !is.na(JR_OA_Serum_cytokine_merged[[paste0(cyto, "_post")]]) & 
+      !is.na(JR_OA_Serum_cytokine_merged[[paste0(cyto, "_pre")]]), 
+      JR_OA_Serum_cytokine_merged[[paste0(cyto, "_post")]] / JR_OA_Serum_cytokine_merged[[paste0(cyto, "_pre")]], 
+      NA  # If either PRE or POST is NA, set the result as NA
+    )
+  
+  # After calculating normalization, replace all NAs in normalized columns with blank values
+  JR_OA_Serum_cytokine_merged[[paste0(cyto, "_normalized")]] <- 
+    ifelse(is.na(JR_OA_Serum_cytokine_merged[[paste0(cyto, "_normalized")]]), 
+           "", JR_OA_Serum_cytokine_merged[[paste0(cyto, "_normalized")]])
+}
+
+head(JR_OA_Serum_cytokine_merged)
+
+```
+
+```{r regresison analysis between cytokine and joint scores, warning=FALSE}
+# prepare cytokine & joint scores for correlation analysis 
+
+overlaped_cytokine <- c("IL.4", "IL.5", "IL.10", 
+                         "IL.1B",  "TNFa", "IL.13")
+overlaped_cytokine2 <- c("IL.4", "IL.5", "IL.1B",  "IL.13")
+
+JR_serum_cytokine_filtered2 <- JR_serum_cytokine_filtered %>%
+  filter(Time_point %in% "Post")%>%
+  select(c(Time_point, Rat_ID, Group, all_of(overlaped_cytokine)))
+
+JR_synovial_cytokine_filtered2 <- JR_synovial_cytokine_filtered %>%
+  select(c(Category,Time_point, Type, Rat_ID, Group, all_of(overlaped_cytokine2)))
+
+JR_OA_joint_score2025_data_simplied <- JR_OA_joint_score2025_data %>%
+  select(Rat_ID, Cartilage_Mankin:Rat_total)
+
+JR_serum_cytokine_joint_combined <- merge(
+  JR_serum_cytokine_filtered2,
+  JR_OA_joint_score2025_data_simplied, by="Rat_ID")
+
+JR_synovial_cytokine_joint_combined <- merge(
+  JR_synovial_cytokine_filtered2,
+  JR_OA_joint_score2025_data_simplied, by="Rat_ID")
+
+colnames(JR_serum_cytokine_joint_combined)
+colnames(JR_synovial_cytokine_joint_combined)
+
+# loop over correlation between serum cytokine vs. joint scores
+serum_cytokine_cols <- names(JR_serum_cytokine_joint_combined )[
+  which(names(JR_serum_cytokine_joint_combined) == "IL.4"):
+  which(names(JR_serum_cytokine_joint_combined) == "IL.13")
+]
+
+Joint_score_cols <- names(JR_serum_cytokine_joint_combined)[
+  which(names(JR_serum_cytokine_joint_combined) == "Cartilage_Mankin"):
+  which(names(JR_serum_cytokine_joint_combined) == "Rat_total")
+]
+
+print(serum_cytokine_cols)
+
+# Create an empty data frame to store results
+Serum_joint_score_results_combined <- data.frame()
+
+# Loop over each  joint score
+for (serum_cytokine in serum_cytokine_cols) {
+  for (joint_score in Joint_score_cols) {
+    
+    model <- lm(as.formula(paste(joint_score, "~", serum_cytokine)), data = JR_serum_cytokine_joint_combined)
+    model_summary <- summary(model)
+
+    temp_result <- data.frame(
+    serum_cytokine = serum_cytokine,
+    Joint_Score = joint_score,
+    Coefficient = model_summary$coefficients[2, 1],  # Estimate for the cytokine
+    P_value = model_summary$coefficients[2, 4],      # P-value for the cytokine
+    R_squared = model_summary$r.squared,              # R-squared value
+    Adj_R_squared = model_summary$adj.r.squared
+  )
+  Serum_joint_score_results_combined <- rbind(Serum_joint_score_results_combined, temp_result)
+  }
+}
+
+print(Serum_joint_score_results_combined)
+
+
+# Define synovial cytokine columns and joint score columns
+Synovial_cytokine_cols <- names(JR_synovial_cytokine_joint_combined)[
+  which(names(JR_synovial_cytokine_joint_combined) == "IL.4") :
+  which(names(JR_synovial_cytokine_joint_combined) == "IL.13")
+]
+
+Joint_score_cols <- names(JR_synovial_cytokine_joint_combined)[
+  which(names(JR_synovial_cytokine_joint_combined) == "Cartilage_Mankin") :
+  which(names(JR_synovial_cytokine_joint_combined) == "Rat_total")
+]
+
+Synovial_joint_score_results_combined <- data.frame()
+# loop over correlation between synovial cytokine vs.joint scores
+for (Synovial_cytokine in Synovial_cytokine_cols) {
+  for (joint_score in Joint_score_cols) {
+    
+    # Fit linear regression model
+    model <- lm(as.formula(paste(joint_score, "~", Synovial_cytokine)), data = JR_synovial_cytokine_joint_combined)
+    model_summary <- summary(model)
+    
+    temp_result <- data.frame(
+      Synovial_cytokine = Synovial_cytokine,
+      Joint_score = joint_score,
+      Coefficient = model_summary$coefficients[2, 1],  # Estimate for the cytokine
+      P_value = model_summary$coefficients[2, 4],      # P-value for the cytokine
+      R_squared = model_summary$r.squared,              # R-squared value
+      Adj_R_squared = model_summary$adj.r.squared       # Adjusted R-squared value
+    )
+    
+    Synovial_joint_score_results_combined <- bind_rows(Synovial_joint_score_results_combined, temp_result)
+  }
+}
+
+print(Synovial_joint_score_results_combined)
+
+write_csv(Serum_joint_score_results_combined, "JR_OA_Serum_joint_score_correlations.csv")
+write_csv(Synovial_joint_score_results_combined, "JR_OA_Synovial_joint_score_correlations.csv")
+
+```
+
+```{r stats for cecal microbiota, warning=FALSE}
+JR_cecal_bacteria_data_wide <- read.csv("JR_cecal_bacteria_qPCR.csv") %>%
+  select(Group, Rat_ID, Total_Bac, A.muciniphila, Roseburia, Akk_Roseb)
+
+test_columns <- c("Total_Bac", "A.muciniphila", "Roseburia", "Akk_Roseb")
+
+# Perform Shapiro-Wilk test for each column and store results
+normality_results <- lapply(test_columns, function(col_name) {
+  values <- JR_cecal_bacteria_data_wide[[col_name]]
+  values <- values[!is.na(values)]
+  test_res <- shapiro.test(values)
+  data.frame(
+    Variable = col_name,
+    W = test_res$statistic,
+    p_value = test_res$p.value
+  )
+})
+
+normality_results_df <- do.call(rbind, normality_results)
+print(normality_results_df)
+
+kruskal.test(Total_Bac ~ Group, data = JR_cecal_bacteria_data_wide)
+kruskal.test(A.muciniphila ~ Group, data = JR_cecal_bacteria_data_wide)
+kruskal.test(Roseburia ~ Group, data = JR_cecal_bacteria_data_wide)
+kruskal.test(Akk_Roseb ~ Group, data = JR_cecal_bacteria_data_wide)
+
+
+JR_cecal_bacteria_data <- read.csv("JR_cecal_bacteria_qPCR.csv")%>%
+  pivot_longer(cols=c(Total_Bac:A.muciniphila), 
+               names_to = "Bacteria", 
+               values_to = "Bacteria_abundance")
+
+JR_cecal_bacteria_data$Group <- factor(JR_cecal_bacteria_data$Group,
+                                             level=c('HFS','HFS+F'))
+
+JR_cecal_bacteria_plot <- ggplot(data = JR_cecal_bacteria_data,
+                                            aes(x = Group, y = log10(Bacteria_abundance))) +  
+  geom_boxplot(aes(fill = Group), color = "black", outlier.color = NA, 
+               position = position_dodge(width = 0.8), alpha = 0.75) +  
+  geom_jitter(aes(fill = Group), shape = 21, size = 2.5, color = "black", 
+              position = position_dodge(width = 0.8)) +  
+  scale_fill_manual(values = c("#800080", "orange")) + 
+  facet_wrap(~ Bacteria, scales = "free", nrow = 1)+
+  labs(x = "", y = "Log10(16S rRNA gene copies)") +  
+  mytheme2  
+
+JR_cecal_bacteria_AKK_Rose_plot <- ggplot(data = JR_cecal_bacteria_data_wide,
+                                            aes(x = Group, y = log10(Akk_Roseb))) +  
+  geom_boxplot(aes(fill = Group), color = "black", outlier.color = NA, 
+               position = position_dodge(width = 0.8), alpha = 0.75) +  
+  geom_jitter(aes(fill = Group), shape = 21, size = 2.5, color = "black", 
+              position = position_dodge(width = 0.8)) +  
+  scale_fill_manual(values = c("#800080", "orange")) + 
+  labs(x = "", y = "AKK:Roseb Ratio") +  
+  mytheme2
+
+JR_cecal_bacteria_plot
+JR_cecal_bacteria_AKK_Rose_plot
+
+ggsave("JR_cecal_bacteria_copy_numb_plot.svg", 
+       plot = JR_cecal_bacteria_plot, 
+       device = "svg", 
+       width = 3, height = 3, 
+       units = "in")
+
+ggsave("JR_cecal_bacteria_AKK_Rose_Ratio_plot.svg", 
+       plot = JR_cecal_bacteria_AKK_Rose_plot, 
+       device = "svg", 
+       width = 1.2, height = 3, 
+       units = "in")
+
+
+```
+
+
+```{r Regression between cecal bacterial & cytokines & joint scores }  
+# install.packages("ggalluvial")
+library(ggalluvial)
+
+JR_cecal_bacteria_data_wide <- read.csv("JR_cecal_bacteria_qPCR.csv") %>%
+  select(-c(Group, Group_code))
+
+JR_cecal_bacteria_joint_score <- merge(JR_cecal_bacteria_data_wide,
+                                       JR_OA_joint_score2025_data ,
+                                       by="Rat_ID")
+
+colnames(JR_cecal_bacteria_joint_score)
+
+Cecal_bacteria_cols <- names(JR_cecal_bacteria_joint_score)[
+  which(names(JR_cecal_bacteria_joint_score) == "Total_Bac") :
+  which(names(JR_cecal_bacteria_joint_score) == "Akk_Roseb")
+]
+
+Joint_score_cols <- names(JR_cecal_bacteria_joint_score)[
+  which(names(JR_cecal_bacteria_joint_score) == "Cartilage_Mankin") :
+  which(names(JR_cecal_bacteria_joint_score) == "Rat_total")
+]
+
+Cecal_bacteria_joint_score_results_combined <- data.frame()
+
+# loop over correlation between synovial cytokine vs.joint scores
+for (Cecal_bacteria in Cecal_bacteria_cols) {
+  for (joint_score in Joint_score_cols) {
+    
+    # Fit linear regression model
+    model <- lm(as.formula(paste(joint_score, "~", Cecal_bacteria)), data = JR_cecal_bacteria_joint_score)
+    model_summary <- summary(model)
+    
+    temp_result <- data.frame(
+      Cecal_bacteria = Cecal_bacteria,
+      Joint_score = joint_score,
+      Coefficient = model_summary$coefficients[2, 1],  # Estimate for the cytokine
+      P_value = model_summary$coefficients[2, 4],      # P-value for the cytokine
+      R_squared = model_summary$r.squared,              # R-squared value
+      Adj_R_squared = model_summary$adj.r.squared       # Adjusted R-squared value
+    )
+    
+    Cecal_bacteria_joint_score_results_combined <- bind_rows(Cecal_bacteria_joint_score_results_combined, temp_result)
+  }
+}
+
+print(Cecal_bacteria_joint_score_results_combined)
+
+JR_A.muciniphila_Cartilage_LT_correlation <- ggplot(JR_cecal_bacteria_joint_score, 
+                                 aes(x = log10(A.muciniphila), y = Cartilage_LT)) + 
+  geom_point(aes(fill = Group), shape =21, size=3) +
+  scale_fill_manual(values = c("#800080", "orange")) +
+  scale_color_manual(values = c("#800080", "orange")) +
+  geom_smooth(color="blue", fill = "darkgrey", method = "lm", alpha = 0.5) +
+  mytheme2
+
+JR_A.muciniphila_Cartilage_LT_correlation
+
+JR_Akk_Roseb_Syn_mem_correlation <- ggplot(JR_cecal_bacteria_joint_score, 
+                                 aes(x = log10(Akk_Roseb), y = Syn_mem)) + 
+  geom_point(aes(fill = Group), shape =21, size=3) +
+  scale_fill_manual(values = c("#800080", "orange")) +
+  scale_color_manual(values = c("#800080", "orange")) +
+  geom_smooth(color="blue", fill = "darkgrey", method = "lm", alpha = 0.5) +
+  mytheme2
+
+JR_Akk_Roseb_Syn_mem_correlation
+
+
+ggsave("JR_A.muciniphila_Cartilage_LT_correlation.svg", 
+       plot = JR_A.muciniphila_Cartilage_LT_correlation, 
+       device = "svg", 
+       width = 4, height = 4, 
+       units = "in")
+
+ggsave("JR_Akk_Roseb_Syn_mem_correlation.svg", 
+       plot = JR_Akk_Roseb_Syn_mem_correlation, 
+       device = "svg", 
+       width = 4, height = 4, 
+       units = "in")
+
+
+#### cecal bacterial & cytokines
+JR_cecal_bacteria_serum_cytokine <- merge(JR_cecal_bacteria_data_wide,
+                                       JR_serum_cytokine_filtered2,
+                                       by="Rat_ID")
+
+
+Cecal_bacteria_cols <- names(JR_cecal_bacteria_serum_cytokine)[
+  which(names(JR_cecal_bacteria_serum_cytokine) == "Total_Bac") :
+  which(names(JR_cecal_bacteria_serum_cytokine) == "Akk_Roseb")
+]
+
+Serum_cytokine_cols <- names(JR_cecal_bacteria_serum_cytokine)[
+  which(names(JR_cecal_bacteria_serum_cytokine) == "IL.4") :
+  which(names(JR_cecal_bacteria_serum_cytokine) == "IL.13")
+]
+
+Cecal_bacteria_Serum_cytokine_results_combined <- data.frame()
+
+for (Cecal_bacteria in Cecal_bacteria_cols) {
+  for (Serum_cytokine in Serum_cytokine_cols) {
+    
+    # Fit linear regression model
+    model <- lm(as.formula(paste(Serum_cytokine, "~", Cecal_bacteria)), data = JR_cecal_bacteria_serum_cytokine)
+    model_summary <- summary(model)
+    
+    temp_result <- data.frame(
+      Cecal_bacteria = Cecal_bacteria,
+      Serum_cytokine = Serum_cytokine,
+      Coefficient = model_summary$coefficients[2, 1],  # Estimate for the cytokine
+      P_value = model_summary$coefficients[2, 4],      # P-value for the cytokine
+      R_squared = model_summary$r.squared,              # R-squared value
+      Adj_R_squared = model_summary$adj.r.squared       # Adjusted R-squared value
+    )
+    
+    Cecal_bacteria_Serum_cytokine_results_combined <- bind_rows(
+    Cecal_bacteria_Serum_cytokine_results_combined, temp_result)
+  }
+}
+
+print(Cecal_bacteria_Serum_cytokine_results_combined)
+
+JR_cecal_bacteria_serum_cytokine_long <- JR_cecal_bacteria_serum_cytokine %>%
+  pivot_longer(cols = c(IL.4, IL.10, IL.1B, IL.13), names_to = "Cytokine", values_to = "Concentration")
+
+JR_Cecal_bacteria_Serum_cytokine_correlation <- ggplot(JR_cecal_bacteria_serum_cytokine_long, 
+                                                       aes(x = log10(Akk_Roseb), y = Concentration, fill = Group)) +
+  geom_point(shape = 21, size = 3) +
+  geom_smooth(method = "lm", se = TRUE, alpha = 0.5, color = "blue", fill = "darkgrey") +
+  scale_fill_manual(values = c("#800080", "orange")) +
+  facet_wrap(~Cytokine, scales = "free_y") +  # Separate panels per cytokine with independent y-axis
+  mytheme1 +
+  labs(color = "Cytokine", fill = "Group", x = "Akkermansia-Roseburia abundance", y = "Cytokine Concentration")
+
+JR_Cecal_bacteria_Serum_cytokine_correlation
+
+ggsave("JR_Cecal_bacteria_Serum_cytokine_correlation2.svg", 
+       plot = JR_Cecal_bacteria_Serum_cytokine_correlation, 
+       device = "svg", 
+       width = 8.5, height = 7, 
+       units = "in")
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
