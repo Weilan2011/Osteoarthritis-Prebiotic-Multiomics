@@ -1,0 +1,25 @@
+﻿Sample_ID,Time_point,Type,Rat_ID,Group,Group_code,Cartilage_Mankin,Cartilage_MT,Cartilage_medT,Cartilage_MTT,Cartilage_MF,Cartilage_LT,Cartilage_LatT,Cartilage_LTT,Cartilage_LF,Bone_OARSI,Bone_MT,Bone_MF,Bone_LT,Bone_LF,Syn_mem,Men_Damg,Rat_total
+S9,Post,Scores,JR_9,HFS,5,21,2,6,8,0,7,0,7,6,0,0,0,0,0,1,1,23
+S27,Post,Scores,JR 27,HFS,5,28,18,0,18,0,10,0,10,0,12,11,0,1,0,4,4,48
+s30,Post,Scores,JR_30,HFS,5,48,17,0,17,18,9,0,9,4,10,2,6,1,1,3,1,62
+S31,Post,Scores,JR 31,HFS,5,53,18,0,18,15,8,6,14,0,9,8,1,0,0,3,3,68
+S34,Post,Scores,JR 34,HFS,5,25,5,5,10,9,6,0,6,0,2,1,1,0,0,2,1,30
+S35,Post,Scores,JR_35,HFS,5,47,4,7,11,16,9,0,9,11,4,0,2,1,1,3,2,56
+S36,Post,Scores,JR_36,HFS,5,43,4,5,9,16,8,0,8,10,5,0,3,1,1,3,2,53
+S37,Post,Scores,JR_37,HFS,5,32,4,8,12,14,6,0,6,0,3,0,3,0,0,3,2,40
+S42,Post,Scores,JR_42,HFS,5,27,8,6,14,0,8,5,13,0,3,2,0,1,0,1,1,32
+S43,Post,Scores,JR_43,HFS,5,52,2,10,12,18,8,0,8,14,3,0,1,1,1,2,0,57
+S49,Post,Scores,JR_49,HFS,5,19,2,6,8,0,11,0,11,0,0,0,0,0,0,2,0,21
+S50,Post,Scores,JR_50,HFS,5,27,6,6,12,0,7,0,7,8,0,0,0,0,0,1,1,23
+S4,Post,Scores,JR_4,HFS+F,7,38,0,6,6,11,9,0,9,12,4,0,0,4,0,2,3,47
+S8,Post,Scores,JR_8,HFS+F,7,23,10,7,17,4,2,0,2,0,1,0,0,1,0,1,0,25
+S10,Post,Scores,JR_10,HFS+F,7,33,12,8,20,0,0,4,4,9,3,2,0,0,1,2,1,39
+S12,Post,Scores,JR_12,HFS+F,7,12,0,0,0,0,0,4,4,8,0,0,0,0,0,2,0,14
+S16,Post,Scores,JR_16,HFS+F,7,2,2,0,2,0,0,0,0,0,0,0,0,0,0,0,0,2
+S20,Post,Scores,JR_20,HFS+F,7,28,0,6,6,9,13,0,13,0,1,0,0,1,0,1,0,30
+S24,Post,Scores,JR_24,HFS+F,7,16,0,6,6,0,6,4,10,0,0,0,0,0,0,0,0,16
+S28,Post,Scores,JR_28,HFS+F,7,53,32,0,32,0,7,7,14,7,11,9,0,2,0,1,3,68
+S29,Post,Scores,JR_29,HFS+F,7,43,22,9,31,0,10,2,12,0,9,9,0,0,0,2,2,56
+S32,Post,Scores,JR_32,HFS+F,7,48,11,9,20,20,8,0,8,0,11,0,10,1,0,2,3,64
+S33,Post,Scores,JR_33,HFS+F,7,35,12,9,21,8,0,6,6,0,2,1,0,0,1,2,1,40
+S38,Post,Scores,JR_38,HFS+F,7,24,0,0,0,12,0,0,0,12,3,0,1,1,1,0,0,27
