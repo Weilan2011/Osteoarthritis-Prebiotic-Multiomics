@@ -1,0 +1,307 @@
+---
+title: "OA_Multi_Omics_Rmarkdown_Phenotypes"
+author: "Weilan Wang 2026@ UofC"
+date: "2026-06-10"
+output: html_document
+---
+
+```{r library setup, echo=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+setwd('C:/Users/Weilan Wang/Desktop/weilan_R')
+## install.packages("viridis")
+## install.packages("multiblock")
+## install.packages("lmerTest")
+## install.packages("emmeans")
+## install.packages("Matrix", type = "source")
+## BiocManager::install("DESeq2")
+## BiocManager::install("EnhancedVolcano")
+## BiocManager::install("MOFA2")
+## BiocManager::install("limma")
+## BiocManager::install("phyloseq")
+## BiocManager::install("microViz")
+## BiocManager::install("MOFAdata")
+## BiocManager::install(c("phyloseq", "microbiome", "ComplexHeatmap"), update = FALSE)
+## install.packages("microViz",repos = c(davidbarnett = "https://david-barnett.r-universe.dev", getOption("repos")))
+
+library(broom.mixed)
+library(car)
+library(caret)
+library(circlize)
+library(ComplexHeatmap)
+library(cowplot)
+library(data.table)
+library(DESeq2)
+library(doParallel)
+library(dplyr)
+library(egg)
+library(EnhancedVolcano)
+library(emmeans)
+library(GGally)
+library(ggcorrplot)
+library(ggraph)
+library(ggnewscale)
+library(ggforce)
+library(ggplot2)
+library(ggpubr)
+library(gridExtra)
+library(grid)
+library(git2r)
+library(Hmisc)
+library(igraph)
+library(lattice)
+library(lme4)
+library(lmerTest)
+library(limma)
+library(lsmeans)
+library(magrittr)
+library(Matrix)
+library(mgcv)
+library(microViz)
+library(MOFA2)
+library(MOFAdata)
+library(multiblock)
+library(MuMIn)
+library(nlme)
+library(pheatmap)
+library(phyloseq)
+library(purrr)
+library(RColorBrewer)
+library(readr)
+library(readxl)
+library(reshape2)
+library(rstatix)
+library(tidyr)
+library(tidyverse)
+library(vegan)
+library(viridis)
+
+```
+
+## R Markdown
+
+```{r theme setup for figures, echo=FALSE}
+mytheme1 <- theme(panel.background = element_rect(fill = "white", color="black"), 
+                  axis.title = element_text(face="bold",size=12, color = "black"),
+                  axis.text.y  = element_text(face="bold",size=12, color = "black"),
+                  axis.text.x  = element_text(face="bold",size=12, color = "black"),
+                  panel.grid.minor.y=element_blank(), 
+                  panel.grid.minor.x=element_blank(),
+                  panel.grid.major.y=element_blank(),
+                  panel.grid.major.x=element_blank(),
+                  strip.background = element_blank(),
+                  strip.text.x = element_text(face="bold",size=14, color = "black"),
+                  legend.position = "top",
+                  legend.box = "horizontal",
+                  legend.title= element_blank(),
+                  legend.text =element_text(size=14),
+                  legend.key = element_blank())
+
+mytheme2 <- theme(panel.background = element_rect(fill = "white", color = NA), 
+                  panel.border = element_blank(), 
+                  axis.line.x = element_line(color = "black"),  # Keep the x-axis line
+                  axis.line.y = element_line(color = "black"),
+                  axis.title = element_text(face="bold",size=12, color = "black"),
+                  axis.text.y  = element_text(face="bold",size=12, color = "black"),
+                  axis.text.x  = element_text(face="bold",size=12, color = "black"),
+                  panel.grid.minor.y=element_blank(), 
+                  panel.grid.minor.x=element_blank(),
+                  panel.grid.major.y=element_blank(),
+                  panel.grid.major.x=element_blank(),
+                  strip.background = element_blank(),
+                  strip.text.x = element_blank(),
+                  strip.text.y = element_blank(),
+                  legend.position = "top",
+                  legend.box = "vertical",
+                  legend.title= element_text(face="bold",size=10, color = "black"),
+                  legend.text =element_text(size=10),
+                  legend.key = element_blank())
+
+mytheme3 <- theme(panel.background = element_rect(fill = "white", color = NA), 
+                  panel.border = element_blank(), 
+                  axis.line.x = element_line(color = "black"),  # Keep the x-axis line
+                  axis.line.y = element_line(color = "black"),
+                  axis.title = element_text(face="bold",size=12, color = "black"),
+                  axis.text.y  = element_text(size=10, color = "black"),
+                  axis.text.x  = element_text(size=10, color = "black"),
+                  panel.grid.minor.y=element_blank(), 
+                  panel.grid.minor.x=element_blank(),
+                  panel.grid.major.y=element_blank(),
+                  panel.grid.major.x=element_blank(),
+                  strip.background = element_blank(),
+                  strip.text.x = element_blank(),
+                  strip.text.y = element_blank(),
+                  legend.position = "none",
+                  legend.box = "vertical",
+                  legend.title= element_text(face="bold",size=10, color = "black"),
+                  legend.text =element_text(size=10),
+                  legend.key = element_blank())
+
+mytheme4 <- theme(panel.background = element_rect(fill = "white", color = NA), 
+                  panel.border = element_rect(color = "black", fill = NA),  # Use element_rect for panel.border
+                  axis.line.x = element_line(color = "black"),  # Keep the x-axis line
+                  axis.line.y = element_line(color = "black"),
+                  axis.title = element_text(face="bold", size=12, color = "black"),
+                  axis.text.y  = element_text(size=10, color = "black"),
+                  axis.text.x  = element_text(size=10, color = "black"),
+                  panel.grid.minor.y = element_blank(), 
+                  panel.grid.minor.x = element_blank(),
+                  panel.grid.major.y = element_line(color = "grey", linetype = "dashed"),
+                  panel.grid.major.x = element_line(color = "grey", linetype = "dashed"),
+                  strip.background = element_rect(),
+                  strip.text.x = element_text(size=10, color = "black"),
+                  strip.text.y = element_blank(),
+                  legend.position = "right",
+                  legend.box = "vertical",
+                  legend.title = element_text(size=10, color = "black"),
+                  legend.text = element_text(size=10),
+                  legend.key = element_rect())
+```
+
+```{r Figures 1B-C. Post-intervention phenotypic changes stats & figures}
+####### Raf_OA_Phenotype_stats ###
+Raf_OA_Phenotype_changes <- read.csv("Raf_phenotype_changes_wide.csv")
+
+participant_counts <- table(Raf_OA_Phenotype_changes$Participant)
+filtered_data <- Raf_OA_Phenotype_changes[Raf_OA_Phenotype_changes$Participant %in% 
+                                            names(participant_counts[participant_counts > 1]), ]
+columns_to_model <- names(filtered_data)[which(names(filtered_data) == "Knee_pain"):ncol(filtered_data)]
+pairwise_comparisons_list <- list()
+descriptive_stats_list <- list()
+
+# Loop through each column and fit the linear model (no random effect)
+for (col in columns_to_model) {
+  formula <- as.formula(paste(col, "~ Diets * Months"))
+  model <- lm(formula, data = filtered_data)
+  emmeans_results <- emmeans(model, pairwise ~ Diets * Months, adjust = "NONE")
+  summary_emmeans <- summary(emmeans_results$contrasts, infer = c(TRUE, TRUE))
+  pairwise_comparisons <- as.data.frame(summary_emmeans)
+  pairwise_comparisons$Phenotype <- col
+  pairwise_comparisons_list[[col]] <- pairwise_comparisons
+  
+  descriptive_stats <- filtered_data %>%
+    group_by(Diets, Months) %>%
+    summarise(
+      mean_value = mean(get(col), na.rm = TRUE),
+      sem_value = sd(get(col), na.rm = TRUE) / sqrt(n())
+    ) %>%
+    mutate(mean_sem = paste0(round(mean_value, 2), " ± ", round(sem_value, 2)), Phenotype = col)  
+  descriptive_stats_list[[col]] <- descriptive_stats
+}
+
+# Combine all pairwise comparisons and descriptive stats into one data frame
+Raf_phenotype_changes_posthoc <- do.call(rbind, pairwise_comparisons_list)
+Raf_phenotype_changes_summary <- do.call(rbind, descriptive_stats_list)
+
+write.csv(Raf_phenotype_changes_posthoc, "Raf_of_phenotypes_changes_posthoc.csv")
+write.csv(Raf_phenotype_changes_summary, "Raf_phenotype_changes_descriptive_stats.csv")
+
+####### Raf_OA_Phenotype_figures ###
+Raf_phenotype_data_changes <- read.csv("Raf_phenotype_changes_wide.csv", header=TRUE, sep=",") 
+
+# Add new combined column before reshaping
+Raf_phenotype_data_changes <- Raf_phenotype_data_changes %>%
+  mutate(Category = paste(Months, Diets, sep = "_"))
+
+Raf_phenotype_data_changes_long <- Raf_phenotype_data_changes %>%
+  pivot_longer(
+    cols = Knee_pain:TimeUpGo,  # Adjust this range as needed to cover all columns involved
+    names_to = "Params_catlog",
+    values_to = "Params_Value"
+  ) %>%
+  mutate(Params_type = case_when(
+    Params_catlog %in% names(Raf_phenotype_data_changes)
+    [which(names(Raf_phenotype_data_changes) == "TotalMass"):which(names(Raf_phenotype_data_changes) == "TrunkFat.")] ~ "Body Composition",
+    Params_catlog %in% names(Raf_phenotype_data_changes)
+    [which(names(Raf_phenotype_data_changes) == "SitToStand"):which(names(Raf_phenotype_data_changes) == "TimeUpGo")] ~ "Function Test",
+    Params_catlog %in% names(Raf_phenotype_data_changes)
+    [which(names(Raf_phenotype_data_changes) == "Knee_pain")] ~ "Knee Pain",
+    TRUE ~ "Other"  
+  ))
+
+write.csv(Raf_phenotype_data_changes_long, 'Raf_phenotype_data_changes_long.csv')
+Raf_phenotype_data_changes_long$Category <- factor(Raf_phenotype_data_changes_long$Category, 
+                                                     levels = c('M3_Placebo', 'M6_Placebo',
+                                                                'M3_Prebiotic','M6_Prebiotic'))
+### Make density figure for each phenotype ###
+Raf_phenotype_data_Body_Composition_Pre_figure <- Raf_phenotype_data_changes_long %>%
+  filter(Params_type == "Body Composition") %>%
+  ggplot(aes(x = Params_Value, color = Category, fill = Category)) +
+  geom_density(aes(y = ..density..), alpha = 0.7) +  
+  geom_vline(xintercept = 0, color = "blue", linetype = "dashed", size = 1) +  
+  scale_fill_manual(values = c("darkgrey", "black", "tomato", "red")) +  
+  scale_color_manual(values = c("darkgrey", "black", "tomato", "red")) + 
+  mytheme3 +  
+  facet_wrap(~Params_catlog, scales = "free", ncol = 4) +  
+  ylab("Density") +
+  xlab("Body Composition")
+
+Raf_phenotype_data_Body_Composition_Pre_figure
+
+
+Raf_phenotype_data_Function_test_Pre_figure <- Raf_phenotype_data_changes_long %>%
+  filter(Params_type == "Function Test") %>%
+  ggplot(aes(x = Params_Value, color = Category, fill = Category)) +
+  geom_density(aes(y = ..density..), alpha = 0.7) +  
+  geom_vline(xintercept = 0, color = "blue", linetype = "dashed", size = 1) +  
+  scale_fill_manual(values = c("darkgrey", "black", "tomato", "red")) + 
+  scale_color_manual(values = c("darkgrey", "black", "tomato", "red")) +  
+  mytheme3 + 
+  facet_wrap(~Params_catlog, scales = "free", ncol = 3) +  
+  ylab("Density") +
+  xlab("Function Test")
+
+Raf_phenotype_data_Function_test_Pre_figure
+
+
+Raf_phenotype_data_Knee_Pain_Pre_figure <- Raf_phenotype_data_changes_long %>%
+  filter(Params_type == "Knee Pain") %>%
+  ggplot(aes(x = Params_Value, color = Category, fill = Category)) +
+  geom_density(aes(y = ..density..), alpha = 0.7) +  
+  geom_vline(xintercept = 0, color = "blue", linetype = "dashed", size = 1) +  
+  scale_fill_manual(values = c("darkgrey", "black", "tomato", "red")) + 
+  scale_color_manual(values = c("darkgrey", "black", "tomato", "red")) +  
+  mytheme3 + 
+  facet_wrap(~Params_catlog, scales = "free", ncol = 3) +  
+  ylab("Density") +
+  xlab("Knee Pain")
+
+Raf_phenotype_data_Knee_Pain_Pre_figure
+
+ggsave("Raf_phenotype_data_Knee_Pain_Pre_figure.svg", 
+       plot = Raf_phenotype_data_Knee_Pain_Pre_figure, 
+       device = "svg", 
+       width = 3, height = 3, 
+       units = "in")
+
+
+# Summary for raw phenotype data
+threshold <- 2
+Raf_OA_phenotype_data_outlier_filtered <- read.csv("Raf_OA_phenotypes.csv") %>%
+  group_by(Group) %>%
+  mutate(across(where(is.numeric), ~ ifelse(abs(. - mean(., na.rm = TRUE)) <= threshold * sd(., na.rm = TRUE), ., NA))) %>%
+  ungroup()
+
+columns_to_model2 <- names(Raf_OA_phenotype_data_outlier_filtered)[
+  which(names(Raf_OA_phenotype_data_outlier_filtered) == "TotalMass"):which(names(Raf_OA_phenotype_data_outlier_filtered) == "Butyrate")]
+columns_to_model2 <- c(columns_to_model2,
+  names(Raf_OA_phenotype_data_outlier_filtered)[which(names(Raf_OA_phenotype_data_outlier_filtered) == "SitToStand"):
+                                                  which(names(Raf_OA_phenotype_data_outlier_filtered) == "Knee_pain")])
+
+descriptive_stats_list2 <- list()
+
+# Loop through each column and fit the linear model (no random effect)
+for (col in columns_to_model2) {
+  descriptive_stats2 <- Raf_OA_phenotype_data_outlier_filtered %>%
+    group_by(Diets, Months) %>%
+    summarise(
+      mean_value = mean(get(col), na.rm = TRUE),
+      sem_value = sd(get(col), na.rm = TRUE) / sqrt(n())
+    ) %>%
+    mutate(mean_sem = paste0(round(mean_value, 2), " ± ", round(sem_value, 2)),
+           Phenotype = col)  
+  descriptive_stats_list2[[col]] <- descriptive_stats2
+}
+
+Raf_raw_phenotype_changes_summary <- do.call(rbind, descriptive_stats_list2)
+write.csv(Raf_raw_phenotype_changes_summary, "Raf_raw_phenotype_descriptive_stats.csv")
+```
