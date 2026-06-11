@@ -1,0 +1,704 @@
+---
+title: "OA_Multi_Omics_Rmarkdown_MOFA2"
+author: "Weilan Wang 2026@ UofC"
+date: "2026-06-11"
+output: html_document
+---
+
+```{r library setup, echo=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+setwd('C:/Users/Weilan Wang/Desktop/weilan_R')
+## install.packages("viridis")
+## install.packages("multiblock")
+## install.packages("lmerTest")
+## install.packages("emmeans")
+## install.packages("Matrix", type = "source")
+## BiocManager::install("DESeq2")
+## BiocManager::install("EnhancedVolcano")
+## BiocManager::install("MOFA2")
+## BiocManager::install("limma")
+## BiocManager::install("phyloseq")
+## BiocManager::install("microViz")
+## BiocManager::install("MOFAdata")
+## BiocManager::install(c("phyloseq", "microbiome", "ComplexHeatmap"), update = FALSE)
+## install.packages("microViz",repos = c(davidbarnett = "https://david-barnett.r-universe.dev", getOption("repos")))
+
+library(broom.mixed)
+library(car)
+library(caret)
+library(circlize)
+library(ComplexHeatmap)
+library(cowplot)
+library(data.table)
+library(DESeq2)
+library(doParallel)
+library(dplyr)
+library(egg)
+library(EnhancedVolcano)
+library(emmeans)
+library(GGally)
+library(ggcorrplot)
+library(ggraph)
+library(ggnewscale)
+library(ggforce)
+library(ggplot2)
+library(ggpubr)
+library(gridExtra)
+library(grid)
+library(git2r)
+library(Hmisc)
+library(igraph)
+library(lattice)
+library(lme4)
+library(lmerTest)
+library(limma)
+library(lsmeans)
+library(magrittr)
+library(Matrix)
+library(mgcv)
+library(microViz)
+library(MOFA2)
+library(MOFAdata)
+library(multiblock)
+library(MuMIn)
+library(nlme)
+library(pheatmap)
+library(phyloseq)
+library(purrr)
+library(RColorBrewer)
+library(readr)
+library(readxl)
+library(reshape2)
+library(rstatix)
+library(tidyr)
+library(tidyverse)
+library(vegan)
+library(viridis)
+
+```
+
+## R Markdown
+
+```{r theme setup for figures, echo=FALSE}
+mytheme1 <- theme(panel.background = element_rect(fill = "white", color="black"), 
+                  axis.title = element_text(face="bold",size=12, color = "black"),
+                  axis.text.y  = element_text(face="bold",size=12, color = "black"),
+                  axis.text.x  = element_text(face="bold",size=12, color = "black"),
+                  panel.grid.minor.y=element_blank(), 
+                  panel.grid.minor.x=element_blank(),
+                  panel.grid.major.y=element_blank(),
+                  panel.grid.major.x=element_blank(),
+                  strip.background = element_blank(),
+                  strip.text.x = element_text(face="bold",size=14, color = "black"),
+                  legend.position = "top",
+                  legend.box = "horizontal",
+                  legend.title= element_blank(),
+                  legend.text =element_text(size=14),
+                  legend.key = element_blank())
+
+mytheme2 <- theme(panel.background = element_rect(fill = "white", color = NA), 
+                  panel.border = element_blank(), 
+                  axis.line.x = element_line(color = "black"),  # Keep the x-axis line
+                  axis.line.y = element_line(color = "black"),
+                  axis.title = element_text(face="bold",size=12, color = "black"),
+                  axis.text.y  = element_text(face="bold",size=12, color = "black"),
+                  axis.text.x  = element_text(face="bold",size=12, color = "black"),
+                  panel.grid.minor.y=element_blank(), 
+                  panel.grid.minor.x=element_blank(),
+                  panel.grid.major.y=element_blank(),
+                  panel.grid.major.x=element_blank(),
+                  strip.background = element_blank(),
+                  strip.text.x = element_blank(),
+                  strip.text.y = element_blank(),
+                  legend.position = "top",
+                  legend.box = "vertical",
+                  legend.title= element_text(face="bold",size=10, color = "black"),
+                  legend.text =element_text(size=10),
+                  legend.key = element_blank())
+
+mytheme3 <- theme(panel.background = element_rect(fill = "white", color = NA), 
+                  panel.border = element_blank(), 
+                  axis.line.x = element_line(color = "black"),  # Keep the x-axis line
+                  axis.line.y = element_line(color = "black"),
+                  axis.title = element_text(face="bold",size=12, color = "black"),
+                  axis.text.y  = element_text(size=10, color = "black"),
+                  axis.text.x  = element_text(size=10, color = "black"),
+                  panel.grid.minor.y=element_blank(), 
+                  panel.grid.minor.x=element_blank(),
+                  panel.grid.major.y=element_blank(),
+                  panel.grid.major.x=element_blank(),
+                  strip.background = element_blank(),
+                  strip.text.x = element_blank(),
+                  strip.text.y = element_blank(),
+                  legend.position = "none",
+                  legend.box = "vertical",
+                  legend.title= element_text(face="bold",size=10, color = "black"),
+                  legend.text =element_text(size=10),
+                  legend.key = element_blank())
+
+mytheme4 <- theme(panel.background = element_rect(fill = "white", color = NA), 
+                  panel.border = element_rect(color = "black", fill = NA),  # Use element_rect for panel.border
+                  axis.line.x = element_line(color = "black"),  # Keep the x-axis line
+                  axis.line.y = element_line(color = "black"),
+                  axis.title = element_text(face="bold", size=12, color = "black"),
+                  axis.text.y  = element_text(size=10, color = "black"),
+                  axis.text.x  = element_text(size=10, color = "black"),
+                  panel.grid.minor.y = element_blank(), 
+                  panel.grid.minor.x = element_blank(),
+                  panel.grid.major.y = element_line(color = "grey", linetype = "dashed"),
+                  panel.grid.major.x = element_line(color = "grey", linetype = "dashed"),
+                  strip.background = element_rect(),
+                  strip.text.x = element_text(size=10, color = "black"),
+                  strip.text.y = element_blank(),
+                  legend.position = "right",
+                  legend.box = "vertical",
+                  legend.title = element_text(size=10, color = "black"),
+                  legend.text = element_text(size=10),
+                  legend.key = element_rect())
+```
+
+```{r Figure 6. MOFA2：Multi-Omics Factorial Analysis}
+library(MOFA2)
+# Set up MOFA2 analysis with proper group/time design and downstream outcome modeling
+dir.create("Raf_OA_Multiomics", showWarnings = FALSE)
+OutputDirectory <- "Raf_OA_Multiomics"
+
+# Load and process input data
+Raf_OA_MetaPhlan_metadata <- read.csv("Raf_OA_phenotypes.csv", header = TRUE, row.names = 1)
+str(Raf_OA_MetaPhlan_metadata)
+
+Raf_OA_MetaPhlan_species <- read.delim("Raf_OA_metaphlan_merged_abundance_table_species.txt", 
+                                       header = TRUE, row.names = 1) 
+Raf_OA_HuMaNn3_Pathway_CPM <- read.delim("Raf_OA_humann_pathabundance_cpm_normalized_unstratified.tsv", 
+                                         header = TRUE, row.names = 1)
+
+colnames(Raf_OA_HuMaNn3_Pathway_CPM) <- gsub("_paired_Abundance.CPM$", "", colnames(Raf_OA_HuMaNn3_Pathway_CPM))
+colnames(Raf_OA_MetaPhlan_species) <- gsub("d_metagenome$", "", colnames(Raf_OA_MetaPhlan_species))
+
+Raf_OA_MetaPhlan_data_transposed <- as.data.frame(t(Raf_OA_MetaPhlan_species))
+str(Raf_OA_MetaPhlan_data_transposed)
+Raf_OA_HuMaNn3_Pathway_CPM_transposed <- as.data.frame(t(Raf_OA_HuMaNn3_Pathway_CPM))
+
+Raf_OA_PUL_Contig_data <- read.csv("Raf_Summarized_PUL_Data.csv", header = TRUE, row.names = 1) %>%
+  select(-c(Participant, Group, Treatment, Time))
+
+Raf_OA_Metabolites_intensity_data <- read.csv("Raf_metabolites_quality_control_Filtered_Intensity_Data_MOFA2.csv", header = TRUE) 
+
+Raf_OA_CGC_Substrate_data <- read.csv("Combined_CGC_substrate_abund_for_network.csv") %>%
+  select(-humanmilkpolysaccharide)
+
+Raf_OA_Metagemoics_combined_data1 <- merge(
+  Raf_OA_MetaPhlan_data_transposed,
+  Raf_OA_HuMaNn3_Pathway_CPM_transposed,
+  by = "row.names", all = TRUE
+) %>%
+  column_to_rownames("Row.names")
+
+Raf_OA_Metagemoics_combined_data2 <- merge(
+  Raf_OA_Metagemoics_combined_data1,
+  Raf_OA_MetaPhlan_metadata,
+  by = "row.names", all = TRUE
+) %>%
+  column_to_rownames("Row.names")
+
+Raf_OA_Metagemoics_combined_data3 <- merge(
+  Raf_OA_Metagemoics_combined_data2,
+  Raf_OA_PUL_Contig_data,
+  by = "Sample_Name", all = TRUE)
+
+Raf_OA_Metagemoics_combined_data4 <- merge(
+  Raf_OA_Metagemoics_combined_data3,
+  Raf_OA_Metabolites_intensity_data,
+  by = "Sample_Name", all = TRUE)
+
+Raf_OA_Metagemoics_combined_data <- merge(
+  Raf_OA_Metagemoics_combined_data4,
+  Raf_OA_CGC_Substrate_data,
+  by = "Sample_Name", all = TRUE)
+
+Raf_OA_Metagemoics_combined_data <- Raf_OA_Metagemoics_combined_data %>%
+  mutate(Diets = as.factor(Diets),
+         Months_numeric = case_when(
+           Months == "M0" ~ 0,
+           Months == "M3" ~ 3,
+           Months == "M6" ~ 6
+         ))%>%
+  select(-UNMAPPED, -UNINTEGRATED)
+
+# Preprocess + reshape per view
+library(caret)
+cytokine_names <- colnames(Raf_OA_Metagemoics_combined_data[1763:1772])
+All_Species <- colnames(Raf_OA_Metagemoics_combined_data[2:1279])
+All_HUMAnN3_pathways <- colnames(Raf_OA_Metagemoics_combined_data[1280:1749])      
+All_PULs <- colnames(Raf_OA_Metagemoics_combined_data[1784:2152]) 
+Metabolites_names <- colnames(Raf_OA_Metagemoics_combined_data[2153:2209])
+CGC_voted_substrates <- colnames(Raf_OA_Metagemoics_combined_data[2210:2244])
+SCFA_names <- colnames(Raf_OA_Metagemoics_combined_data[1773:1778])
+
+# check if the col names are correct
+print(Metabolites_names)
+print(CGC_voted_substrates)
+print(cytokine_names)
+print(All_Species)
+print(All_PULs)
+print(SCFA_names)
+print(All_HUMAnN3_pathways)
+
+pp_Cytokine <- caret::preProcess(Raf_OA_Metagemoics_combined_data[c(cytokine_names)], method = c("center", "scale", "medianImpute"))
+pp_All_Species <- caret::preProcess(Raf_OA_Metagemoics_combined_data[c(All_Species)], method = c("center", "scale", "medianImpute"))
+pp_All_HUMAnN3 <- caret::preProcess(Raf_OA_Metagemoics_combined_data[c(All_HUMAnN3_pathways)], method = c("center", "scale", "medianImpute"))
+pp_Metabolites <- caret::preProcess(Raf_OA_Metagemoics_combined_data[c(Metabolites_names)], method = c("center", "scale", "medianImpute"))
+pp_CGC <- caret::preProcess(Raf_OA_Metagemoics_combined_data[c(CGC_voted_substrates)], method = c("center", "scale", "medianImpute"))
+pp_All_PULs <- caret::preProcess(Raf_OA_Metagemoics_combined_data[c(All_PULs)], method = c("center", "scale", "medianImpute"))
+
+
+Cytokine_data <- stats::predict(pp_Cytokine, newdata = Raf_OA_Metagemoics_combined_data[c(cytokine_names,"Sample_Name")])
+All_Species_data <- stats::predict(pp_All_Species, newdata = Raf_OA_Metagemoics_combined_data[c(All_Species,"Sample_Name")])
+HUMAnN3_data <- stats::predict(pp_All_HUMAnN3, newdata = Raf_OA_Metagemoics_combined_data[c(All_HUMAnN3_pathways,"Sample_Name")])
+Metabolites_data <- stats::predict(pp_Metabolites, newdata = Raf_OA_Metagemoics_combined_data[c(Metabolites_names,"Sample_Name")])
+CGC_data <- stats::predict(pp_CGC, newdata = Raf_OA_Metagemoics_combined_data[c(CGC_voted_substrates,"Sample_Name")])
+PULs_data <- stats::predict(pp_All_PULs, newdata = Raf_OA_Metagemoics_combined_data[c(All_PULs,"Sample_Name")])
+
+
+Cytokine_data <- Cytokine_data %>% relocate(Sample_Name)
+All_Species_data <- All_Species_data %>% relocate(Sample_Name)
+HUMAnN3_data <- HUMAnN3_data %>% relocate(Sample_Name)
+Metabolites_data <- Metabolites_data %>% relocate(Sample_Name)
+CGC_data <- CGC_data %>% relocate(Sample_Name)
+PULs_data <- PULs_data %>% relocate(Sample_Name)
+
+
+dat2a <-data.frame(Cytokine_data[,c(1)], stack(Cytokine_data[2:ncol(Cytokine_data)]))
+dat2a$view <- "Cytokine"
+colnames(dat2a)[1] <- "sample"
+colnames(dat2a)[2] <- "value"
+colnames(dat2a)[3] <- "feature"
+
+dat2b <-data.frame(All_Species_data [,c(1)], stack(All_Species_data[2:ncol(All_Species_data)]))
+dat2b$view <- "MetaPhlAn4"
+colnames(dat2b)[1] <- "sample"
+colnames(dat2b)[2] <- "value"
+colnames(dat2b)[3] <- "feature"
+
+dat2c <-data.frame(HUMAnN3_data[,c(1)], stack(HUMAnN3_data[2:ncol(HUMAnN3_data)]))
+dat2c$view <- "HUMAnN3"
+colnames(dat2c)[1] <- "sample"
+colnames(dat2c)[2] <- "value"
+colnames(dat2c)[3] <- "feature"
+
+dat2d <-data.frame(Metabolites_data[,c(1)], stack(Metabolites_data[2:ncol(Metabolites_data)]))
+dat2d$view <- "Metabolites"
+colnames(dat2d)[1] <- "sample"
+colnames(dat2d)[2] <- "value"
+colnames(dat2d)[3] <- "feature"
+
+dat2e <-data.frame(CGC_data[,c(1)], stack(CGC_data[2:ncol(CGC_data)]))
+dat2e$view <- "CGC"
+colnames(dat2e)[1] <- "sample"
+colnames(dat2e)[2] <- "value"
+colnames(dat2e)[3] <- "feature"
+
+dat2f <-data.frame(PULs_data[,c(1)], stack(PULs_data[2:ncol(PULs_data)]))
+dat2f$view <- "PULs"
+colnames(dat2f)[1] <- "sample"
+colnames(dat2f)[2] <- "value"
+colnames(dat2f)[3] <- "feature"
+
+
+# Combine into one MOFA2-ready long table
+Raf_OA_MOFA2_dt <- rbind(dat2a, dat2b, dat2c, dat2d, dat2e, dat2f)
+
+# Add group info (tied to sample)
+Raf_OA_MOFA2_dt <- Raf_OA_MOFA2_dt %>%
+  left_join(Raf_OA_Metagemoics_combined_data[, c("Sample_Name", "Diets")], by = c("sample" = "Sample_Name")) %>%
+  dplyr::rename(group = Diets)
+
+Raf_OA_MOFA2_dt$feature <- as.character(Raf_OA_MOFA2_dt$feature)
+
+ggdensity(Raf_OA_MOFA2_dt, 
+          x = "value", 
+          fill = "group", 
+          color = "group", 
+          alpha = 0.4) +
+  facet_wrap(~view + group, nrow = 2, scales = "free") +
+  theme_minimal()
+ggsave("density_distribution.png", plot = last_plot(), path = OutputDirectory, width = 11, height = 7)
+
+##### Create MOFA ######## 
+Raf_OA_MOFA2 <- create_mofa(Raf_OA_MOFA2_dt)
+print(Raf_OA_MOFA2)
+
+# Subset metadata based on sample names in MOFA model
+Raf_OA_MOFA2_metadata <- Raf_OA_MetaPhlan_metadata[
+  match(Raf_OA_MOFA2@samples_metadata$sample, Raf_OA_MetaPhlan_metadata$Sample_Name),
+]
+
+Raf_OA_MOFA2_metadata$group <- Raf_OA_Metagemoics_combined_data$Diets[
+  match(Raf_OA_MOFA2_metadata$Sample_Name, Raf_OA_Metagemoics_combined_data$Sample_Name)
+]
+
+colnames(Raf_OA_MOFA2_metadata)[1] <- "sample"
+
+Raf_OA_MOFA2_metadata$Months_numeric <- dplyr::case_when(
+  Raf_OA_MOFA2_metadata$Months == "M0" ~ 0,
+  Raf_OA_MOFA2_metadata$Months == "M3" ~ 3,
+  Raf_OA_MOFA2_metadata$Months == "M6" ~ 6
+)
+
+samples_metadata(Raf_OA_MOFA2) <- Raf_OA_MOFA2_metadata
+print(Raf_OA_MOFA2)
+
+# Set up MOFA + MEFISTO options
+data_opts <- get_default_data_options(Raf_OA_MOFA2)
+data_opts$scale_views <- T
+head(data_opts)
+
+model_opts <- get_default_model_options(Raf_OA_MOFA2)
+model_opts$num_factors <- 2
+head(model_opts)
+
+train_opts <- get_default_training_options(Raf_OA_MOFA2)
+train_opts$seed <- 813496
+train_opts$convergence_mode <- "fast"
+train_opts$maxiter <- 5000
+train_opts$stochastic <- TRUE
+head(train_opts)
+
+mefisto_opts <- get_default_mefisto_options(Raf_OA_MOFA2)
+mefisto_opts$time <- "Months_numeric"
+mefisto_opts$n_grid <- 15
+mefisto_opts$start_opt <- 20
+mefisto_opts$opt_freq <- 25
+mefisto_opts$warping <- TRUE
+mefisto_opts$model_groups <- TRUE
+print(mefisto_opts)
+
+stochastic_opts <- get_default_stochastic_options(Raf_OA_MOFA2)
+head(stochastic_opts)
+
+# Prepare and Train the Model
+Raf_OA_MOFA2 <- prepare_mofa(
+  object = Raf_OA_MOFA2,
+  data_options = data_opts,
+  model_options = model_opts,
+  training_options = train_opts,
+  mefisto_options = mefisto_opts,
+  stochastic_options = stochastic_opts  
+)
+
+library(reticulate)
+library(MOFA2)
+
+conda_create("RAF_OA_MOFA2")
+use_condaenv(condaenv = 'RAF_OA_MOFA2', required = TRUE)
+outfile = file.path(OutputDirectory,"Raf_OA_MOFA2.hdf5")
+Raf_OA_MOFA2 <- run_mofa(Raf_OA_MOFA2, outfile, use_basilisk = TRUE)
+
+
+######## Downstream Analysis with trained MOFA2 ######## 
+num_factors <- Raf_OA_MOFA2@dimensions$K
+print(num_factors)
+
+sample_metadata <- samples_metadata(Raf_OA_MOFA2)
+print(colnames(sample_metadata))
+
+plot_factors(Raf_OA_MOFA2,
+             factors = 1:min(5, num_factors),  # Adjusting to the available number of factors
+             color_by = "group"
+)
+ggsave("factors_Diet.png", plot = last_plot(), path = OutputDirectory, width = 8, height = 7)
+
+# Variance decomposition
+Raf_OA_MOFA2_factors <- get_factors(Raf_OA_MOFA2)
+head(Raf_OA_MOFA2_factors)
+
+#cumulative variance explained by view
+r2 <- Raf_OA_MOFA2@cache$variance_explained$r2_per_factor
+r2.dt <- r2 %>%
+  as.data.table %>% .[,factor:=as.factor(1:Raf_OA_MOFA2@dimensions$K)] %>%
+  melt(id.vars=c("factor"), variable.name="view", value.name = "r2")
+
+write.csv(r2.dt, "Raf_OA_MOFA2_variance_explained2.csv", row.names = FALSE)
+
+plot_variance_explained(Raf_OA_MOFA2, plot_total = T)[[2]]
+ggsave("variance_explained.png", plot = last_plot(), path = OutputDirectory)
+
+plot_variance_explained(Raf_OA_MOFA2, max_r2=25)
+ggsave("variance_explained_factors2.svg", plot = last_plot(), path = OutputDirectory)
+
+#cumulative variance explained by view
+r2 <- Raf_OA_MOFA2@cache$variance_explained$r2_per_factor
+r2.dt <- r2 %>%
+  as.data.table %>% .[,factor:=as.factor(1:Raf_OA_MOFA2@dimensions$K)] %>%
+  melt(id.vars=c("factor"), variable.name="view", value.name = "r2")
+
+write.csv(r2.dt, "Raf_OA_MOFA2_variance_explained2.csv", row.names = FALSE)
+
+r2_placebo <- Raf_OA_MOFA2@cache$variance_explained$r2_per_factor[[1]]
+r2_prebiotic <- Raf_OA_MOFA2@cache$variance_explained$r2_per_factor[[2]]
+r2_placebo
+r2_prebiotic
+
+r2_total <- Raf_OA_MOFA2@cache$variance_explained$r2_total
+r2_total
+
+r2_placebo.dt <- r2_placebo %>%
+  as.data.table %>% .[,factor:=as.factor(1:Raf_OA_MOFA2@dimensions$K)] %>%
+  melt(id.vars=c("factor"), variable.name="view", value.name = "r2")
+
+r2_prebiotic.dt <- r2_prebiotic %>%
+  as.data.table %>% .[,factor:=as.factor(1:Raf_OA_MOFA2@dimensions$K)] %>%
+  melt(id.vars=c("factor"), variable.name="view", value.name = "r2")
+
+ggplot(r2_placebo.dt, aes(x=factor, y=r2, fill=view))+
+  geom_bar(stat="identity") +
+  labs(x="Factor number", y="Cumulative variance explained (%)") +
+  theme(
+    legend.title = element_blank(),
+    legend.position = "top",
+    axis.text = element_text(size=rel(0.8))
+  ) + 
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.5), 
+        axis.text = element_text(size=14), 
+        text = element_text(size=14)) +
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(), 
+        axis.line = element_line(colour = "black"))
+ggsave("cumulative_variance_explained_factors_Placebo.svg", plot = last_plot(), path = OutputDirectory)
+
+ggplot(r2_prebiotic.dt, aes(x=factor, y=r2, fill=view))+
+  geom_bar(stat="identity") +
+  labs(x="Factor number", y="Cumulative variance explained (%)") +
+  theme(
+    legend.title = element_blank(),
+    legend.position = "top",
+    axis.text = element_text(size=rel(0.8))
+  ) + 
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.5), 
+        axis.text = element_text(size=14), 
+        text = element_text(size=14)) +
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(), 
+        axis.line = element_line(colour = "black"))
+ggsave("cumulative_variance_explained_factors_Prebiotic.svg", plot = last_plot(), path = OutputDirectory)
+
+ggline(r2.dt, x="factor", y="r2", color="view") +
+  labs(x="Factor number", y="Cumulative variance explained (%)") +
+  theme(
+    legend.title = element_blank(),
+    legend.position = "top",
+    axis.text = element_text(size=rel(0.8))
+  ) + 
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.5), axis.text = element_text(size=14), text = element_text(size=14)) +
+  theme_classic()
+ggsave("cumulative_variance_explained_factors-line.svg", plot = last_plot(), path = OutputDirectory)
+
+#### Factor weights #### 
+plot_weights_fn <- function(Raf_OA_MOFA2, factor=1, view=1, nfeatures=10) {
+  p2 <- plot_top_weights(Raf_OA_MOFA2,
+                         factors = factor,
+                         view = view,
+                         nfeatures = nfeatures
+  )
+  
+  return(p2)
+}
+
+svg(file = "Factor1_Weights.svg", width = 12, height = 18)
+
+# Generate the individual plots for each view
+plot1 <- plot_weights_fn(Raf_OA_MOFA2, factor=1, view="CGC", nfeatures=20)
+plot2 <- plot_weights_fn(Raf_OA_MOFA2, factor=1, view="HUMAnN3", nfeatures=20)
+plot3 <- plot_weights_fn(Raf_OA_MOFA2, factor=1, view="PULs", nfeatures=20)
+
+combined_plots <- cowplot::plot_grid(plotlist = list(plot1, plot2, plot3), nrow = 3)
+print(combined_plots)
+dev.off()
+
+plot_weights_fn2 <- function(Raf_OA_MOFA2, factor=2, view=1, nfeatures=10) {
+  p2 <- plot_top_weights(Raf_OA_MOFA2,
+                         factors = factor,
+                         view = view,
+                         nfeatures = nfeatures
+  )
+  
+  return(p2)
+}
+svg(file = "Factor2_Weights.svg", width = 9, height = 12)
+
+# Generate the individual plots for each view
+plot1 <- plot_weights_fn(Raf_OA_MOFA2, factor=2, view="PULs", nfeatures=10)
+plot2 <- plot_weights_fn(Raf_OA_MOFA2, factor=2, view="HUMAnN3", nfeatures=10)
+plot3 <- plot_weights_fn(Raf_OA_MOFA2, factor=2, view="Cytokine", nfeatures=10)
+
+combined_plots <- cowplot::plot_grid(plotlist = list(plot1, plot2, plot3), nrow = 3)
+print(combined_plots)
+dev.off()
+
+factor_scores <- get_factors(Raf_OA_MOFA2)
+plot_data_overview(Raf_OA_MOFA2)
+
+
+plot_factor(Raf_OA_MOFA2, 
+  factor = 1:2,
+  color_by = "group",
+  shape_by = "Months"
+)
+
+plot_factors(Raf_OA_MOFA2, 
+  factors = c(1,2), 
+  color_by = "Butyrate", 
+  shape_by = "group", 
+  dot_size = 3.5
+) + scale_fill_gradient(low = "white", high = "#BF3EFF")
+
+plot_factors(Raf_OA_MOFA2, 
+  factors = c(1,2), 
+  color_by = "Propionate", 
+  shape_by = "group", 
+  dot_size = 3.5
+) + scale_fill_gradient(low = "white", high = "#BF3EFF")
+
+
+plot_factors(Raf_OA_MOFA2, 
+  factors = c(1,2), 
+  color_by = "TotalLean", 
+  shape_by = "group", 
+  dot_size = 3.5
+) + scale_fill_gradient(low = "white", high = "#BF3EFF")
+
+
+plot_factors(Raf_OA_MOFA2, 
+  factors = c(1,2), 
+  color_by = "HandGrip", 
+  shape_by = "group", 
+  dot_size = 3.5
+) + scale_fill_gradient(low = "white", high = "#BF3EFF")
+
+
+# correlations between factors with SCFA
+SCFA <- c("Acetate", "Propionate", "Butyrate")
+# Correlations between factors with covariates
+correlation_SCFA_log_pval <- correlate_factors_with_covariates(Raf_OA_MOFA2,
+                                                              covariates = SCFA,
+                                                              plot = "log_pval",
+                                                              alpha = 0.05,
+                                                              return_data = TRUE)
+
+correlation_SCFA_r <- correlate_factors_with_covariates(Raf_OA_MOFA2,
+                                                        covariates = SCFA,
+                                                        plot = "r",
+                                                        return_data = TRUE)
+
+write.csv(correlation_SCFA_r, "MOFA2_correlation_SCFA_r.csv")
+write.csv(correlation_SCFA_log_pval, "MOFA2_correlation_SCFA_log_pval.csv")
+
+# Extract the correlation matrix from the result
+SCFA_cor_matrix_long <- melt(correlation_SCFA_r_values)
+colnames(SCFA_cor_matrix_long) <- c("Factor", "SCFA", "Correlation")
+head(SCFA_cor_matrix_long)
+
+
+MOFA2_Factor_SCFA_correlation_plot2 <- ggplot(SCFA_cor_matrix_long, 
+                                              aes(x = SCFA, y = Factor, fill = Correlation)) +
+  geom_tile() +
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", midpoint = 0) +  # Adjust colors
+  theme_minimal() +
+  labs(title = "Correlation Between Factors and SCFAs", x = "SCFA", y = "Factors") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+
+MOFA2_Factor_SCFA_correlation_plot2
+
+MOFA2_Factor_SCFA_correlation_plot <- correlate_factors_with_covariates(Raf_OA_MOFA2,
+                                                                        covariates = SCFA, 
+                                                                        plot = "log_pval")
+MOFA2_Factor_SCFA_correlation_plot
+
+ggsave("MOFA2_Factor_SCFA_correlation_plot.svg", MOFA2_Factor_SCFA_correlation_plot, width = 4, height = 3)
+ggsave("MOFA2_Factor_SCFA_correlation_plot_r.svg", MOFA2_Factor_SCFA_correlation_plot2, width = 4, height = 3)
+
+#### correlations between factros and  Major_outcomes
+Major_outcomes <- c("TotalMass", "TotalLean", "TrunkFatKg","TrunkFat.","TotalFat","BMC", "BMD" ,"Fat." ,
+                    "HandGrip","FastWalk","SixMinWalk", "TimeUpGo","SitToStand", "Knee_pain")
+
+
+MOFA2_Factor_Major_outcomes_log_pval <- correlate_factors_with_covariates(
+  Raf_OA_MOFA2,
+  covariates = Major_outcomes,
+  plot = "log_pval",
+  alpha = 0.05,
+  return_data = TRUE
+)
+
+MOFA2_Factor_Major_outcomes_r <- correlate_factors_with_covariates(
+  Raf_OA_MOFA2,
+  covariates = Major_outcomes,
+  plot = "r",
+  return_data = TRUE
+)
+
+write.csv(MOFA2_Factor_Major_outcomes_r,
+          "MOFA2_correlation_Major_outcomes_r.csv")
+
+write.csv(MOFA2_Factor_Major_outcomes_log_pval,
+          "MOFA2_correlation_Major_outcomes_log_pval.csv")
+
+# Convert r matrix to long format
+Major_outcomes_cor_matrix_long <- reshape2::melt(MOFA2_Factor_Major_outcomes_r)
+
+colnames(Major_outcomes_cor_matrix_long) <- c(
+  "Factor",
+  "Major_outcomes",
+  "Correlation"
+)
+
+head(Major_outcomes_cor_matrix_long)
+
+# Plot r values
+MOFA2_Factor_Major_outcomes_correlation_plot2 <- ggplot(
+  Major_outcomes_cor_matrix_long,
+  aes(x = Major_outcomes, y = Factor, fill = Correlation)
+) +
+  geom_tile() +
+  scale_fill_gradient2(
+    low = "blue",
+    mid = "white",
+    high = "red",
+    midpoint = 0
+  ) +
+  theme_minimal() +
+  labs(
+    title = "Correlation Between Factors and Major Outcomes",
+    x = "Major Outcomes",
+    y = "Factors"
+  ) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+MOFA2_Factor_Major_outcomes_correlation_plot2
+
+# Plot log p-values
+MOFA2_Factor_Major_outcomes_correlation_plot <- correlate_factors_with_covariates(
+  Raf_OA_MOFA2,
+  covariates = Major_outcomes,
+  plot = "log_pval"
+)
+
+MOFA2_Factor_Major_outcomes_correlation_plot
+
+ggsave(
+  "MOFA2_Factor_Major_outcomes_correlation.svg",
+  MOFA2_Factor_Major_outcomes_correlation_plot,
+  width = 4,
+  height = 3
+)
+
+ggsave(
+  "MOFA2_Factor_Major_outcomes_correlation_plot_r.svg",
+  MOFA2_Factor_Major_outcomes_correlation_plot2,
+  width = 4,
+  height = 3
+)
+
+```
