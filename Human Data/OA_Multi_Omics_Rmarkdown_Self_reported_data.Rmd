@@ -1,0 +1,302 @@
+---
+title: "OA_Multi_Omics_Rmarkdown_Self_reported_data"
+author: "Weilan Wang 2026@ UofC"
+date: "2026-06-11"
+output: html_document
+---
+
+
+```{r library setup, echo=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+setwd('C:/Users/Weilan Wang/Desktop/weilan_R')
+## install.packages("viridis")
+## install.packages("multiblock")
+## install.packages("lmerTest")
+## install.packages("emmeans")
+## install.packages("Matrix", type = "source")
+## BiocManager::install("DESeq2")
+## BiocManager::install("EnhancedVolcano")
+## BiocManager::install("MOFA2")
+## BiocManager::install("limma")
+## BiocManager::install("phyloseq")
+## BiocManager::install("microViz")
+## BiocManager::install("MOFAdata")
+## BiocManager::install(c("phyloseq", "microbiome", "ComplexHeatmap"), update = FALSE)
+## install.packages("microViz",repos = c(davidbarnett = "https://david-barnett.r-universe.dev", getOption("repos")))
+
+library(broom.mixed)
+library(car)
+library(caret)
+library(circlize)
+library(ComplexHeatmap)
+library(cowplot)
+library(data.table)
+library(DESeq2)
+library(doParallel)
+library(dplyr)
+library(egg)
+library(EnhancedVolcano)
+library(emmeans)
+library(GGally)
+library(ggcorrplot)
+library(ggraph)
+library(ggnewscale)
+library(ggforce)
+library(ggplot2)
+library(ggpubr)
+library(gridExtra)
+library(grid)
+library(git2r)
+library(Hmisc)
+library(igraph)
+library(lattice)
+library(lme4)
+library(lmerTest)
+library(limma)
+library(lsmeans)
+library(magrittr)
+library(Matrix)
+library(mgcv)
+library(microViz)
+library(MOFA2)
+library(MOFAdata)
+library(multiblock)
+library(MuMIn)
+library(nlme)
+library(pheatmap)
+library(phyloseq)
+library(purrr)
+library(RColorBrewer)
+library(readr)
+library(readxl)
+library(reshape2)
+library(rstatix)
+library(tidyr)
+library(tidyverse)
+library(vegan)
+library(viridis)
+
+```
+
+## R Markdown
+
+```{r theme setup for figures, echo=FALSE}
+mytheme1 <- theme(panel.background = element_rect(fill = "white", color="black"), 
+                  axis.title = element_text(face="bold",size=12, color = "black"),
+                  axis.text.y  = element_text(face="bold",size=12, color = "black"),
+                  axis.text.x  = element_text(face="bold",size=12, color = "black"),
+                  panel.grid.minor.y=element_blank(), 
+                  panel.grid.minor.x=element_blank(),
+                  panel.grid.major.y=element_blank(),
+                  panel.grid.major.x=element_blank(),
+                  strip.background = element_blank(),
+                  strip.text.x = element_text(face="bold",size=14, color = "black"),
+                  legend.position = "top",
+                  legend.box = "horizontal",
+                  legend.title= element_blank(),
+                  legend.text =element_text(size=14),
+                  legend.key = element_blank())
+
+mytheme2 <- theme(panel.background = element_rect(fill = "white", color = NA), 
+                  panel.border = element_blank(), 
+                  axis.line.x = element_line(color = "black"),  # Keep the x-axis line
+                  axis.line.y = element_line(color = "black"),
+                  axis.title = element_text(face="bold",size=12, color = "black"),
+                  axis.text.y  = element_text(face="bold",size=12, color = "black"),
+                  axis.text.x  = element_text(face="bold",size=12, color = "black"),
+                  panel.grid.minor.y=element_blank(), 
+                  panel.grid.minor.x=element_blank(),
+                  panel.grid.major.y=element_blank(),
+                  panel.grid.major.x=element_blank(),
+                  strip.background = element_blank(),
+                  strip.text.x = element_blank(),
+                  strip.text.y = element_blank(),
+                  legend.position = "top",
+                  legend.box = "vertical",
+                  legend.title= element_text(face="bold",size=10, color = "black"),
+                  legend.text =element_text(size=10),
+                  legend.key = element_blank())
+
+mytheme3 <- theme(panel.background = element_rect(fill = "white", color = NA), 
+                  panel.border = element_blank(), 
+                  axis.line.x = element_line(color = "black"),  # Keep the x-axis line
+                  axis.line.y = element_line(color = "black"),
+                  axis.title = element_text(face="bold",size=12, color = "black"),
+                  axis.text.y  = element_text(size=10, color = "black"),
+                  axis.text.x  = element_text(size=10, color = "black"),
+                  panel.grid.minor.y=element_blank(), 
+                  panel.grid.minor.x=element_blank(),
+                  panel.grid.major.y=element_blank(),
+                  panel.grid.major.x=element_blank(),
+                  strip.background = element_blank(),
+                  strip.text.x = element_blank(),
+                  strip.text.y = element_blank(),
+                  legend.position = "none",
+                  legend.box = "vertical",
+                  legend.title= element_text(face="bold",size=10, color = "black"),
+                  legend.text =element_text(size=10),
+                  legend.key = element_blank())
+
+mytheme4 <- theme(panel.background = element_rect(fill = "white", color = NA), 
+                  panel.border = element_rect(color = "black", fill = NA),  # Use element_rect for panel.border
+                  axis.line.x = element_line(color = "black"),  # Keep the x-axis line
+                  axis.line.y = element_line(color = "black"),
+                  axis.title = element_text(face="bold", size=12, color = "black"),
+                  axis.text.y  = element_text(size=10, color = "black"),
+                  axis.text.x  = element_text(size=10, color = "black"),
+                  panel.grid.minor.y = element_blank(), 
+                  panel.grid.minor.x = element_blank(),
+                  panel.grid.major.y = element_line(color = "grey", linetype = "dashed"),
+                  panel.grid.major.x = element_line(color = "grey", linetype = "dashed"),
+                  strip.background = element_rect(),
+                  strip.text.x = element_text(size=10, color = "black"),
+                  strip.text.y = element_blank(),
+                  legend.position = "right",
+                  legend.box = "vertical",
+                  legend.title = element_text(size=10, color = "black"),
+                  legend.text = element_text(size=10),
+                  legend.key = element_rect())
+```
+
+```{r Figure 3B.Self-reported Data stats & Figure}
+Raf_OA_self_reported_data <- read.csv("Raf_OA_self_reported_data.csv")
+
+# Reshape the dataset to long format, excluding ParticipantID and Group
+Raf_OA_self_reported_data_long <- Raf_OA_self_reported_data %>%
+  pivot_longer(
+    cols = -c(ParticipantID, Diets),
+    names_to = "Variable",
+    values_to = "Value"
+  ) %>%
+  mutate(
+    Months = case_when(
+      grepl("\\.1$", Variable) ~ "M0",
+      grepl("\\.2$", Variable) ~ "M3",
+      grepl("\\.3$", Variable) ~ "M6"
+    ),
+    Diets = factor(
+      Diets,
+      levels = c(1, 2),
+      labels = c("Prebiotic", "Placebo")
+    ),
+    Variable = gsub("\\.\\d+$", "", Variable),
+    Sample_Name = paste0(
+      ParticipantID,
+      case_when(
+        Months == "M0" ~ "A",
+        Months == "M3" ~ "B",
+        Months == "M6" ~ "C"
+      )
+    ),
+    Group = paste(Diets, Months, sep = "_"),
+    Category = case_when(
+      grepl("^GI_", Variable) ~ "GI_feelings_function",
+      Variable %in% c(
+        "Total_energy", "Protein", "Carbohydrate",
+        "Dietary_Fiber", "Total_Sugars", "Total_Fat"
+      ) ~ "Energy_nutritent_intake",
+      TRUE ~ "Quality_of_life"
+    )
+  ) %>%
+  select(
+    ParticipantID, Months, Sample_Name, Diets,
+    Group, Variable, Category, Value
+  )
+  
+unique(Raf_OA_self_reported_data_long$Variable)
+unique(Raf_OA_self_reported_data_long$Group)
+
+# Stats on each Variable by fitting linear mixed model 
+variables_to_analyze <- unique(Raf_OA_self_reported_data_long$Variable)
+all_results <- data.frame()  # Create an empty dataframe to store all results
+
+# Loop over each variable and run the statistical analysis
+for (var in variables_to_analyze) {
+  data_var <- Raf_OA_self_reported_data_long %>% filter(Variable == var)
+  model <- lmer(Value ~ Diets * Months + (1 | ParticipantID), data = data_var, REML = FALSE)
+  emms <- emmeans(model, ~ Diets * Months)
+  emms_pairwise_comparisons <- contrast(emms, interaction = "pairwise", simple = "each")
+  emms_df <- as.data.frame(emms_pairwise_comparisons)
+  emms_df$Variable <- var
+  all_results <- rbind(all_results, emms_df)
+  print(paste("Results for", var))
+  print(summary(emms_pairwise_comparisons))
+}
+
+Raf_OA_self_reported_data_long$Group <- factor(Raf_OA_self_reported_data_long$Group, 
+                                             levels = c('Placebo_M0','Prebiotic_M0',
+                                                        'Placebo_M3','Prebiotic_M3',
+                                                        'Placebo_M6','Prebiotic_M6'))
+
+Raf_OA_Self_reported_food_intake_boxplot <- Raf_OA_self_reported_data_long %>%
+  filter(Category %in% c("Energy_nutritent_intake")) %>%
+  ggplot(aes(x = Months, y = Value, fill = Group)) +
+  stat_boxplot(geom ='errorbar', na.rm = TRUE) + 
+  geom_boxplot(alpha = 1, na.rm = TRUE) +
+  geom_point(position = position_jitterdodge(jitter.width = 0.25, dodge.width = 0.75), 
+             size = 2, color = "black", shape = 21) +
+  scale_fill_manual(values = c("grey", "#FFA07A", "dimgrey", 
+                               "tomato", "black", "red")) +
+  ylab("Self-reported Energy & Nutritent Intake") +
+  xlab("Time (Month)") +
+  facet_wrap(~ Variable, scales = "free", nrow = 2)+
+  mytheme3 + 
+  geom_vline(xintercept = seq(1.5, length(unique(Raf_OA_self_reported_data_long$Variable)) - 0.5, by = 1), 
+             linetype = "dashed", color = "grey", size = 0.3)
+
+Raf_OA_Self_reported_food_intake_boxplot
+
+Raf_OA_Self_reported_GI_Function_boxplot <- Raf_OA_self_reported_data_long %>%
+  filter(Category %in% c("GI_feelings_function")) %>%
+  ggplot(aes(x = Months, y = Value, fill = Group)) +
+  stat_boxplot(geom ='errorbar', na.rm = TRUE) + 
+  geom_boxplot(alpha = 1, na.rm = TRUE) +
+  geom_point(position = position_jitterdodge(jitter.width = 1, dodge.width = 0.75), 
+             size = 2, color = "black", shape = 21) +
+  scale_fill_manual(values = c("grey", "#FFA07A", "dimgrey", 
+                               "tomato", "black", "red")) +
+  ylab("Self-reported GI Function & Feeling") +
+  xlab("Time (Month)") +
+  facet_wrap(~ Variable, scales = "free", nrow = 2)+
+  mytheme1 + 
+  geom_vline(xintercept = seq(1.5, length(unique(Raf_OA_self_reported_data_long$Variable)) - 0.5, by = 1), 
+             linetype = "dashed", color = "grey", size = 0.3)
+
+Raf_OA_Self_reported_GI_Function_boxplot
+
+Raf_OA_Self_reported_life_quality_boxplot <- Raf_OA_self_reported_data_long %>%
+  filter(Category %in% c("Quality_of_life")) %>%
+  ggplot(aes(x = Months, y = Value, fill = Group)) +
+  stat_boxplot(geom ='errorbar', na.rm = TRUE) + 
+  geom_boxplot(alpha = 1, na.rm = TRUE) +
+  geom_point(position = position_jitterdodge(jitter.width = 0.25, dodge.width = 0.75), 
+             size = 2, color = "black", shape = 21) +
+  scale_fill_manual(values = c("grey", "#FFA07A", "dimgrey", 
+                               "tomato", "black", "red")) +
+  ylab("Self-reported Quality of Life") +
+  xlab("Time (Month)") +
+  facet_wrap(~ Variable, scales = "free", nrow = 2)+
+  mytheme1 + 
+  geom_vline(xintercept = seq(1.5, length(unique(Raf_OA_self_reported_data_long$Variable)) - 0.5, by = 1), 
+             linetype = "dashed", color = "grey", size = 0.3)
+
+Raf_OA_Self_reported_life_quality_boxplot
+
+ggsave("Raf_OA_Self_reported_food_intake_boxplot.svg", 
+       plot = Raf_OA_Self_reported_food_intake_boxplot, 
+       device = "svg", 
+       width = 5, height = 3.5, 
+       units = "in")
+
+ggsave("Raf_OA_Self_reported_GI_Function_boxplot.svg", 
+       plot = Raf_OA_Self_reported_GI_Function_boxplot, 
+       device = "svg", 
+       width = 4, height = 3.5, 
+       units = "in")
+
+ggsave("Raf_OA_Self_reported_life_quality_boxplot.svg", 
+       plot = Raf_OA_Self_reported_life_quality_boxplot, 
+       device = "svg", 
+       width = 7.5, height = 3.5, 
+       units = "in")
+```
